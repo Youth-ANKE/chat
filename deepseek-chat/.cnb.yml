@@ -1,0 +1,84 @@
+# ──────────────────────────────────────────────────────────
+#  DeepSeek Chatbox Lite — CNB CI/CD 配置
+# ──────────────────────────────────────────────────────────
+
+# 全局环境变量（在 CNB 项目设置中配置密钥）
+# DEEPSEEK_API_KEY  — DeepSeek API 密钥（部署时需要）
+
+# 触发条件
+push:
+  - main
+  - develop
+  - "feat/**"
+  - "fix/**"
+pull_request:
+  branches:
+    - main
+
+# ── Pipeline 阶段定义 ──────────────────────────────────
+
+stages:
+  - name: install
+    label: 安装依赖
+    image: node:22-alpine
+    cache:
+      key: npm-cache
+      paths:
+        - node_modules
+        - .npm
+    script:
+      - npm ci --prefer-offline --no-audit --no-fund
+
+  - name: typecheck
+    label: TypeScript 类型检查
+    image: node:22-alpine
+    needs:
+      - install
+    cache:
+      key: npm-cache
+      paths:
+        - node_modules
+    script:
+      - npx tsc --noEmit
+
+  - name: lint
+    label: 代码检查
+    image: node:22-alpine
+    needs:
+      - install
+    cache:
+      key: npm-cache
+      paths:
+        - node_modules
+    script:
+      - npx tsc --noEmit
+
+  - name: build
+    label: 生产构建
+    image: node:22-alpine
+    needs:
+      - typecheck
+    cache:
+      key: npm-cache
+      paths:
+        - node_modules
+    script:
+      - npm run build
+    artifacts:
+      paths:
+        - dist/
+      expire: 7d
+
+  - name: deploy-vercel
+    label: 部署到 Vercel
+    image: node:22-alpine
+    needs:
+      - build
+    rules:
+      - if: $CNB_BRANCH == "main"
+    script:
+      - npx vercel deploy --prod --token $VERCEL_TOKEN --yes
+    secrets:
+      - VERCEL_TOKEN
+      - VERCEL_ORG_ID
+      - VERCEL_PROJECT_ID
