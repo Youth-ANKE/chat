@@ -25,6 +25,9 @@ export function createSession(model?: ModelName): ChatSession {
     model: model ?? settings.defaultModel,
     thinking: settings.defaultThinking,
     temperature: settings.defaultTemperature,
+    topP: settings.topP,
+    maxTokens: settings.maxTokens,
+    webSearch: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

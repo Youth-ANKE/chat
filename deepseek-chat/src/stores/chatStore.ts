@@ -16,7 +16,10 @@ interface ChatState {
   setSystemPrompt: (id: string, prompt: string) => void;
   setModel: (id: string, model: ModelName) => void;
   setThinking: (id: string, thinking: boolean) => void;
+  setWebSearch: (id: string, enabled: boolean) => void;
   setTemperature: (id: string, temperature: number) => void;
+  setTopP: (id: string, topP: number) => void;
+  setMaxTokens: (id: string, maxTokens: number) => void;
   pinSession: (id: string) => void;
   setMessages: (sessionId: string, messages: ChatMessage[]) => void;
 
@@ -123,10 +126,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (session) saveSession(session);
   },
 
+  setWebSearch: (id, enabled) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === id ? { ...s, webSearch: enabled } : s
+      ),
+    }));
+    const session = get().sessions.find((s) => s.id === id);
+    if (session) saveSession(session);
+  },
+
   setTemperature: (id, temperature) => {
     set((state) => ({
       sessions: state.sessions.map((s) =>
         s.id === id ? { ...s, temperature } : s
+      ),
+    }));
+    const session = get().sessions.find((s) => s.id === id);
+    if (session) saveSession(session);
+  },
+
+  setTopP: (id, topP) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === id ? { ...s, topP } : s
+      ),
+    }));
+    const session = get().sessions.find((s) => s.id === id);
+    if (session) saveSession(session);
+  },
+
+  setMaxTokens: (id, maxTokens) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === id ? { ...s, maxTokens } : s
       ),
     }));
     const session = get().sessions.find((s) => s.id === id);

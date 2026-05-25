@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ChatLayout } from './components/ChatLayout';
 import { useChatStore } from './stores/chatStore';
 import { useSettingsStore } from './stores/settingsStore';
+import { playStartup, playBootTick, playBootReady, setSoundEnabled as applySoundEnabled } from './lib/sound';
 import { Sparkles } from 'lucide-react';
 
 function SplashScreen() {
@@ -16,7 +17,11 @@ function SplashScreen() {
 
   useEffect(() => {
     if (bootStep >= bootLines.length) return;
-    const timer = setTimeout(() => setBootStep((s) => s + 1), 400 + bootStep * 200);
+    const timer = setTimeout(() => {
+      if (bootStep > 0) playBootTick();
+      if (bootStep === bootLines.length - 1) playBootReady();
+      setBootStep((s) => s + 1);
+    }, 400 + bootStep * 200);
     return () => clearTimeout(timer);
   }, [bootStep]);
 
@@ -74,11 +79,20 @@ function App() {
   const [initializing, setInitializing] = useState(true);
   const init = useChatStore((s) => s.init);
   const darkMode = useSettingsStore((s) => s.settings.darkMode);
+  const soundEnabled = useSettingsStore((s) => s.settings.soundEnabled);
+
+  // Sync sound engine with persisted setting
+  useEffect(() => {
+    applySoundEnabled(soundEnabled);
+  }, [soundEnabled]);
 
   useEffect(() => {
     // Slight delay for boot animation
     const t = setTimeout(() => {
-      init().finally(() => setInitializing(false));
+      init().finally(() => {
+        setInitializing(false);
+        playStartup();
+      });
     }, 2500);
     return () => clearTimeout(t);
   }, [init]);

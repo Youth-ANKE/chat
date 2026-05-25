@@ -13,6 +13,7 @@ import { useState, useMemo } from 'react';
 import { useChatStore } from '../stores/chatStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { cn } from '../lib/utils';
+import { playClick, playNewSession, playDelete, playToggleOn, playToggleOff } from '../lib/sound';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -91,7 +92,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </button>
         <div className={`w-4 h-px my-1 ${darkMode ? 'bg-white/[0.06]' : 'bg-gray-200'}`} />
         <button
-          onClick={() => newSession()}
+          onClick={() => { playNewSession(); newSession(); }}
           className={`p-1.5 rounded-lg transition-all duration-200 ${
             darkMode
               ? 'hover:bg-white/10 text-gray-500 hover:text-cyan-400 hover:shadow-[0_0_8px_rgba(0,229,255,0.15)]'
@@ -155,7 +156,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
         {/* New chat button */}
         <button
-          onClick={() => newSession()}
+          onClick={() => { playNewSession(); newSession(); }}
           className={`group flex items-center gap-2.5 w-full px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
             darkMode
               ? 'bg-white/[0.04] hover:bg-white/[0.08] text-cyan-400/80 hover:text-cyan-300 border border-cyan-500/10 hover:border-cyan-500/30 hover:shadow-[0_0_14px_rgba(0,229,255,0.08)]'
@@ -211,7 +212,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               {group.items.map((sessionItem) => (
                 <div
                   key={sessionItem.id}
-                  onClick={() => switchSession(sessionItem.id)}
+                  onClick={() => { playClick(); switchSession(sessionItem.id); }}
                   className={cn(
                     'group flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer mb-0.5 transition-all duration-150',
                     sessionItem.id === activeId
@@ -230,7 +231,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
                   {/* Pin button */}
                   <button
-                    onClick={(e) => { e.stopPropagation(); pinSession(sessionItem.id); }}
+                    onClick={(e) => { e.stopPropagation(); playClick(); pinSession(sessionItem.id); }}
                     className={cn(
                       'opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all',
                       sessionItem.pinned
@@ -249,7 +250,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
                   {/* Delete */}
                   <button
-                    onClick={(e) => { e.stopPropagation(); if (confirm('确定要删除此对话吗？')) deleteSession(sessionItem.id); }}
+                    onClick={(e) => { e.stopPropagation(); if (confirm('确定要删除此对话吗？')) { playDelete(); deleteSession(sessionItem.id); } }}
                     className={cn(
                       'opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all',
                       darkMode

@@ -1,4 +1,4 @@
-import { Bot, User, AlertCircle, Copy, Check, Pencil, Brain, ChevronDown, ChevronUp } from 'lucide-react';
+import { Bot, User, AlertCircle, Copy, Check, Pencil, Brain, ChevronDown, ChevronUp, Image, FileText } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import type { ChatMessage } from '../types';
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -195,7 +195,7 @@ export function MessageItem({ message, isEditing, onEdit, onStartEdit, onCancelE
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0 max-w-3xl">
+      <div className="flex-1 min-w-0">
         {/* Header */}
         <div className="flex items-center gap-2 mb-1.5">
           <span className={`text-xs font-semibold ${roleLabelClass}`}>
@@ -238,6 +238,31 @@ export function MessageItem({ message, isEditing, onEdit, onStartEdit, onCancelE
             {/* Thinking block for assistant messages */}
             {!isUser && (hasReasoning || isStreaming) && (
               <ThinkingBlock reasoning={message.reasoning ?? ''} isStreaming={isStreaming} />
+            )}
+
+            {/* Attachment previews for user messages */}
+            {isUser && message.attachments && message.attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {message.attachments.map((att) => (
+                  <div
+                    key={att.id}
+                    className={`relative flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs ${
+                      darkMode
+                        ? 'bg-white/[0.04] border border-white/[0.08]'
+                        : 'bg-gray-50 border border-gray-200'
+                    }`}
+                  >
+                    {att.type === 'image' ? (
+                      <img src={att.data} alt={att.name} className="w-6 h-6 rounded object-cover flex-shrink-0" />
+                    ) : (
+                      <FileText className={`w-3.5 h-3.5 ${darkMode ? 'text-cyan-400' : 'text-cyan-500'}`} />
+                    )}
+                    <span className={`max-w-[140px] truncate ${darkMode ? 'text-white/70' : 'text-gray-600'}`}>
+                      {att.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
             )}
 
             {hasError ? (

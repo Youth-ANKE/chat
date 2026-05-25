@@ -4,13 +4,16 @@ import { MessageList } from './MessageList';
 import { Composer } from './Composer';
 import { SettingsPanel } from './SettingsPanel';
 import { ShortcutHelp } from './ShortcutHelp';
+import { UsagePanel } from './UsagePanel';
 import { TechBackground } from './TechBackground';
 import { useChatStore } from '../stores/chatStore';
+import { useUsageStore } from '../stores/usageStore';
 import { createMessage, generateTitle } from '../lib/session';
 import { streamChat } from '../lib/stream';
-import { Settings, Menu, Trash2, Download, Zap } from 'lucide-react';
+import { Settings, Menu, Trash2, Download, Zap, BarChart3 } from 'lucide-react';
 import type { ModelName } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
+import { playClick, playToggleOn, playToggleOff, playSend, playStop, playDelete, playExport, playRegenerate } from '../lib/sound';
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 2.5);
@@ -20,6 +23,7 @@ export function ChatLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutOpen, setShortcutOpen] = useState(false);
+  const [usageOpen, setUsageOpen] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -33,15 +37,18 @@ export function ChatLayout() {
   const appendContent = useChatStore((s) => s.appendContent);
   const appendReasoning = useChatStore((s) => s.appendReasoning);
   const renameSession = useChatStore((s) => s.renameSession);
-  const getActive = useChatStore((s) => s.getActive);
   const getActiveMessages = useChatStore((s) => s.getActiveMessages);
   const clearMessages = useChatStore((s) => s.clearMessages);
   const setMessages = useChatStore((s) => s.setMessages);
   const exportConversation = useChatStore((s) => s.exportConversation);
   const newSession = useChatStore((s) => s.newSession);
+  const setWebSearch = useChatStore((s) => s.setWebSearch);
+
+  const addUsageRecord = useUsageStore((s) => s.addRecord);
+  const settings = useSettingsStore((s) => s.settings);
 
   const activeMessages = getActiveMessages();
-  const session = getActive();
+  const session = useChatStore((s) => s.sessions.find(sess => sess.id === s.activeId));
 
   // Auto-generate title from first user message
   const titleGeneratedRef = useRef(false);
@@ -94,7 +101,11 @@ export function ChatLayout() {
   }, [activeId, session]);
 
   const doStream = useCallback(
-    async (localActiveId: string, messages: { role: 'user' | 'assistant'; content: string }[], assistantMsgId: string) => {
+    async (
+      localActiveId: string,
+      messages: { role: 'user' | 'assistant'; content: string; attachments?: { type: 'image' | 'text'; mimeType: string; data: string; name: string }[] }[],
+      assistantMsgId: string
+    ) => {
       const currentSession = useChatStore.getState().sessions.find((s) => s.id === localActiveId);
       if (!currentSession) return;
 
@@ -102,13 +113,32 @@ export function ChatLayout() {
       abortRef.current = abortController;
       setIsStreaming(true);
 
+      // Capture usage data for stats tracking
+      let usageCaptured = false;
+
+      // Apply context message limit (trim older messages)
+      let streamMessages = messages;
+      const ctxLimit = settings.contextLimit ?? 0;
+      if (ctxLimit > 0 && messages.length > ctxLimit) {
+        // Keep the first user message + last N messages
+        const keepFromEnd = ctxLimit - 1;
+        streamMessages = [
+          messages[0],
+          ...messages.slice(messages.length - keepFromEnd),
+        ];
+      }
+
       await streamChat(
         {
-          messages,
+          messages: streamMessages,
           model: currentSession.model,
           temperature: currentSession.temperature,
+          max_tokens: currentSession.maxTokens ?? settings.maxTokens,
           thinking: currentSession.thinking,
           systemPrompt: currentSession.systemPrompt,
+          webSearch: currentSession.webSearch,
+          topP: currentSession.topP ?? settings.topP,
+          streamOutput: settings.streamOutput,
         },
         {
           signal: abortController.signal,
@@ -117,6 +147,24 @@ export function ChatLayout() {
           },
           onReasoning: (chunk) => {
             appendReasoning(localActiveId, assistantMsgId, chunk);
+          },
+          onRetry: () => {
+            // Clear stale partial content before retry stream starts
+            updateMessage(localActiveId, assistantMsgId, {
+              content: '',
+              reasoning: undefined,
+            });
+          },
+          onUsage: (usage) => {
+            if (!usageCaptured) {
+              usageCaptured = true;
+              addUsageRecord({
+                sessionId: localActiveId,
+                sessionTitle: currentSession.title,
+                model: currentSession.model,
+                usage,
+              });
+            }
           },
           onError: (error) => {
             updateMessage(localActiveId, assistantMsgId, {
@@ -132,16 +180,27 @@ export function ChatLayout() {
         }
       );
     },
-    [appendContent, appendReasoning, updateMessage]
+    [appendContent, appendReasoning, updateMessage, addUsageRecord, settings]
   );
 
   const handleSend = useCallback(
-    async (content: string) => {
+    async (content: string, attachments?: { type: 'image' | 'text'; mimeType: string; data: string; name: string }[]) => {
       if (!activeId || isStreaming) return;
+      playSend();
       const currentSession = useChatStore.getState().sessions.find((s) => s.id === activeId);
       if (!currentSession) return;
 
       const userMsg = createMessage('user', content, 'done');
+      if (attachments && attachments.length > 0) {
+        userMsg.attachments = attachments.map((a, i) => ({
+          id: `att-${Date.now()}-${i}`,
+          name: a.name,
+          type: a.type,
+          mimeType: a.mimeType,
+          data: a.data,
+          size: a.data.length,
+        }));
+      }
       addMessage(activeId, userMsg);
 
       const assistantMsg = createMessage('assistant', '', 'streaming');
@@ -150,6 +209,12 @@ export function ChatLayout() {
       const messages = [...currentSession.messages, userMsg].map((m) => ({
         role: m.role as 'user' | 'assistant',
         content: m.content,
+        attachments: m.attachments?.map((a) => ({
+          type: a.type,
+          mimeType: a.mimeType,
+          data: a.data,
+          name: a.name,
+        })),
       }));
 
       await doStream(activeId, messages, assistantMsg.id);
@@ -183,6 +248,12 @@ export function ChatLayout() {
       const streamMessages = [...keepMsgs, editedUser].map((m) => ({
         role: m.role as 'user' | 'assistant',
         content: m.content,
+        attachments: m.attachments?.map((a) => ({
+          type: a.type,
+          mimeType: a.mimeType,
+          data: a.data,
+          name: a.name,
+        })),
       }));
 
       await doStream(activeId, streamMessages, assistantMsg.id);
@@ -192,6 +263,7 @@ export function ChatLayout() {
 
   const handleRegenerate = useCallback(async () => {
     if (!activeId || isStreaming) return;
+    playRegenerate();
     const currentSession = useChatStore.getState().sessions.find((s) => s.id === activeId);
     if (!currentSession) return;
     const msgs = currentSession.messages;
@@ -216,12 +288,19 @@ export function ChatLayout() {
     const streamMessages = [...keepMsgs.slice(0, -1), userMsg].map((m) => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
+      attachments: m.attachments?.map((a) => ({
+        type: a.type,
+        mimeType: a.mimeType,
+        data: a.data,
+        name: a.name,
+      })),
     }));
 
     await doStream(activeId, streamMessages, assistantMsg.id);
   }, [activeId, isStreaming, addMessage, updateMessage, clearMessages, doStream]);
 
   const handleStop = useCallback(() => {
+    playStop();
     abortRef.current?.abort();
     if (activeId) {
       const msgs = getActiveMessages();
@@ -235,6 +314,7 @@ export function ChatLayout() {
 
   const handleExport = useCallback(() => {
     if (!activeId) return;
+    playExport();
     const md = exportConversation(activeId);
     if (!md) return;
     const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
@@ -248,10 +328,21 @@ export function ChatLayout() {
 
   const handleClear = useCallback(() => {
     if (!activeId) return;
+    playDelete();
     if (activeMessages.length === 0) return;
     if (!confirm('确定要清空当前对话吗？此操作不可撤销。')) return;
     clearMessages(activeId);
   }, [activeId, activeMessages, clearMessages]);
+
+  const handleToggleWebSearch = useCallback(() => {
+    if (!activeId) return;
+    // Read latest state directly from store to avoid stale closure
+    const latest = useChatStore.getState().sessions.find((s) => s.id === activeId);
+    const next = !latest?.webSearch;
+    setWebSearch(activeId, next);
+    if (next) playToggleOn();
+    else playToggleOff();
+  }, [activeId, setWebSearch]);
 
   const totalTokens = activeMessages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
 
@@ -263,7 +354,7 @@ export function ChatLayout() {
       {/* Sidebar */}
       <Sidebar
         collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed((v) => !v)}
+        onToggle={() => { playClick(); setSidebarCollapsed((v) => !v); }}
       />
 
       {/* Main chat area */}
@@ -277,7 +368,7 @@ export function ChatLayout() {
           <div className="flex items-center gap-2.5 min-w-0">
             {sidebarCollapsed && (
               <button
-                onClick={() => setSidebarCollapsed(false)}
+                onClick={() => { playClick(); setSidebarCollapsed(false); }}
                 className={`p-1 rounded-lg transition-colors ${
                   darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-cyan-400' : 'hover:bg-gray-200/60 text-gray-400'
                 }`}
@@ -343,7 +434,16 @@ export function ChatLayout() {
               <Download className="w-3.5 h-3.5" />
             </button>
             <button
-              onClick={() => setSettingsOpen(true)}
+              onClick={() => { playClick(); setUsageOpen(true); }}
+              className={`p-1.5 rounded-lg transition-colors ${
+                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-emerald-400' : 'hover:bg-gray-100 text-gray-400'
+              }`}
+              title="用量统计"
+            >
+              <BarChart3 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => { playClick(); setSettingsOpen(true); }}
               className={`p-1.5 rounded-lg transition-colors ${
                 darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-purple-400' : 'hover:bg-gray-100 text-gray-400'
               }`}
@@ -372,14 +472,19 @@ export function ChatLayout() {
           isStreaming={isStreaming}
           model={session?.model as ModelName}
           disabled={editingMsgId !== null}
+          webSearch={session?.webSearch ?? false}
+          onToggleWebSearch={handleToggleWebSearch}
         />
       </div>
 
       {/* Settings panel */}
-      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsPanel open={settingsOpen} onClose={() => { playClick(); setSettingsOpen(false); }} />
+
+      {/* Usage stats panel */}
+      <UsagePanel open={usageOpen} onClose={() => { playClick(); setUsageOpen(false); }} />
 
       {/* Shortcut help */}
-      <ShortcutHelp open={shortcutOpen} onClose={() => setShortcutOpen(false)} />
+      <ShortcutHelp open={shortcutOpen} onClose={() => { playClick(); setShortcutOpen(false); }} />
     </div>
   );
 }

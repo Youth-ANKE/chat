@@ -107,7 +107,7 @@ function CodeBlock({
 
 export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
-    <div className="message-content text-white/85">
+    <div className="message-content">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}

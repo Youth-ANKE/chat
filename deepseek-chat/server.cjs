@@ -48,6 +48,8 @@ async function handleChat(req, res) {
     max_tokens = 4096,
     thinking = false,
     user_id,
+    tools,
+    top_p,
   } = body;
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -62,11 +64,13 @@ async function handleChat(req, res) {
     model: selectedModel,
     messages,
     stream: true,
-    stream_options: { include_usage: false },
+    stream_options: { include_usage: true },
     temperature: safeTemperature,
     max_tokens: safeMaxTokens,
     thinking: { type: thinking ? 'enabled' : 'disabled' },
     ...(user_id ? { user_id } : {}),
+    ...(tools ? { tools } : {}),
+    ...(top_p !== undefined ? { top_p } : {}),
   });
 
   const upstream = await fetch('https://api.deepseek.com/chat/completions', {

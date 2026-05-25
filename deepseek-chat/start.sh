@@ -22,6 +22,7 @@ ok()    { echo -e "${GREEN}[  ✓]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[warn]${NC} $*"; }
 err()   { echo -e "${RED}[err]${NC}  $*"; }
 step()  { echo -e "\n${CYAN}${BOLD}▶ $*${NC}"; }
+banner(){ echo -e "${CYAN}${BOLD}$*${NC}"; }
 
 banner "
 ╔═══════════════════════════════════════╗
