@@ -12,8 +12,7 @@ push:
   - "feat/**"
   - "fix/**"
 pull_request:
-  branches:
-    - main
+  - main
 
 # ── Pipeline 阶段定义 ──────────────────────────────────
 
