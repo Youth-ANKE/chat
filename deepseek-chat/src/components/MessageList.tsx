@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import type { ChatMessage } from '../types';
 import { MessageItem } from './MessageItem';
-import { Sparkles, Cpu, Zap, ChevronRight, Brain, Code2, Globe } from 'lucide-react';
+import { Sparkles, Cpu, Zap, ChevronRight, Brain, Code2, Globe, SearchX } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 
 interface MessageListProps {
@@ -11,6 +11,7 @@ interface MessageListProps {
   onEdit?: (msgId: string, newContent: string) => void;
   onStartEdit?: (msgId: string) => void;
   onCancelEdit?: () => void;
+  searchQuery?: string;
 }
 
 const SUGGESTIONS = [
@@ -22,13 +23,25 @@ const SUGGESTIONS = [
   { icon: '💎', label: '架构设计', prompt: '为百万级用户的 SaaS 产品设计技术架构方案' },
 ];
 
-export function MessageList({ messages, onSend, editingMsgId, onEdit, onStartEdit, onCancelEdit }: MessageListProps) {
+export function MessageList({ messages, onSend, editingMsgId, onEdit, onStartEdit, onCancelEdit, searchQuery }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const darkMode = useSettingsStore((s) => s.settings.darkMode);
 
+  // Filter messages based on search query
+  const filteredMessages = useMemo(() => {
+    if (!searchQuery?.trim()) return messages;
+    const q = searchQuery.toLowerCase();
+    return messages.filter((m) => {
+      const inContent = m.content.toLowerCase().includes(q);
+      const inReasoning = m.reasoning?.toLowerCase().includes(q);
+      const inAttachments = m.attachments?.some((a) => a.name.toLowerCase().includes(q));
+      return inContent || inReasoning || inAttachments;
+    });
+  }, [messages, searchQuery]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [filteredMessages]);
 
   if (messages.length === 0) {
     return (
@@ -178,21 +191,30 @@ export function MessageList({ messages, onSend, editingMsgId, onEdit, onStartEdi
 
   return (
     <div className="flex-1 overflow-y-auto custom-scrollbar">
-      {messages.map((msg, i) => (
-        <div
-          key={msg.id}
-          className="animate-fade-in"
-          style={{ animationDelay: `${Math.min(i * 20, 200)}ms` }}
-        >
-          <MessageItem
-            message={msg}
-            isEditing={editingMsgId === msg.id}
-            onEdit={onEdit}
-            onStartEdit={msg.role === 'user' ? onStartEdit : undefined}
-            onCancelEdit={onCancelEdit}
-          />
+      {filteredMessages.length === 0 && searchQuery?.trim() ? (
+        <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-500">
+          <SearchX className="w-10 h-10 opacity-20" />
+          <span className="text-sm">未找到匹配的消息</span>
+          <span className="text-xs text-gray-600">尝试其他关键词</span>
         </div>
-      ))}
+      ) : (
+        filteredMessages.map((msg, i) => (
+          <div
+            key={msg.id}
+            className="animate-message-in"
+            style={{ animationDelay: `${Math.min(i * 20, 200)}ms` }}
+          >
+            <MessageItem
+              message={msg}
+              isEditing={editingMsgId === msg.id}
+              onEdit={onEdit}
+              onStartEdit={msg.role === 'user' ? onStartEdit : undefined}
+              onCancelEdit={onCancelEdit}
+              searchHighlight={searchQuery?.trim()}
+            />
+          </div>
+        ))
+      )}
       <div ref={bottomRef} />
     </div>
   );

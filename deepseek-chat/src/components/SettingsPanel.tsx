@@ -1,12 +1,14 @@
-import { X, Sun, Moon, Zap, Brain, Cpu, Sparkles, Sliders, Volume2, VolumeX, Headphones, Play, Music, Star } from 'lucide-react';
+import { X, Sun, Moon, Zap, Brain, Cpu, Sparkles, Sliders, Volume2, VolumeX, Headphones, Play, Music, Star, Palette, Type, Clock, Download, Upload, RotateCcw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useChatStore } from '../stores/chatStore';
-import { MODEL_OPTIONS } from '../types';
+import { MODEL_OPTIONS, ACCENT_COLORS } from '../types';
 import { cn } from '../lib/utils';
 import { playClick, playToggleOn, playToggleOff, playSave } from '../lib/sound';
 import { getAvailableVoices, previewVoice, AZURE_VOICES, type SpeechVoice } from '../lib/speech';
 import { previewTrack, MUSIC_TRACKS, type MusicMode } from '../lib/music';
+import { useToast } from './Toast';
+import { useConfirm } from './ConfirmDialog';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -33,7 +35,16 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
     setTopP,
     setMaxTokens,
     setStreamOutput,
+    setAccentColor,
+    setFontSize,
+    setShowTimestamps,
+    exportSettings,
+    importSettings,
+    resetSettings,
   } = useSettingsStore();
+
+  const { toast } = useToast();
+  const { confirm } = useConfirm();
 
   const activeId = useChatStore((s) => s.activeId);
   const getActive = useChatStore((s) => s.getActive);
@@ -1147,6 +1158,210 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 </div>
               </div>
             )}
+          </section>
+
+          {/* ═══ Appearance Settings ═══ */}
+          <section>
+            <h3 className={cn(
+              'flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider mb-3',
+              darkMode ? 'text-gray-500' : 'text-gray-400'
+            )}>
+              <Palette className="w-3 h-3" />
+              外观设置
+            </h3>
+
+            {/* Accent color */}
+            <div className="mb-4">
+              <label className={cn(
+                'text-[11px] font-medium mb-2 block',
+                darkMode ? 'text-gray-500' : 'text-gray-500'
+              )}>
+                强调色
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {ACCENT_COLORS.map((color) => (
+                  <button
+                    key={color.value}
+                    onClick={() => { playClick(); setAccentColor(color.value); }}
+                    className={cn(
+                      'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-all duration-200',
+                      settings.accentColor === color.value
+                        ? darkMode
+                          ? 'bg-white/[0.06] border border-white/[0.15] text-white/85'
+                          : 'bg-white border border-gray-300 shadow-sm text-gray-800'
+                        : darkMode
+                          ? 'border border-transparent text-gray-500 hover:bg-white/[0.03]'
+                          : 'border border-transparent text-gray-400 hover:bg-gray-100'
+                    )}
+                    title={color.label}
+                  >
+                    <span
+                      className={cn('w-3.5 h-3.5 rounded-full', color.class)}
+                      style={{
+                        boxShadow: settings.accentColor === color.value
+                          ? `0 0 8px ${color.glow}`
+                          : 'none',
+                      }}
+                    />
+                    {color.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Font size */}
+            <div className="mb-4">
+              <label className={cn(
+                'flex items-center gap-1.5 text-[11px] font-medium mb-2',
+                darkMode ? 'text-gray-500' : 'text-gray-500'
+              )}>
+                <Type className="w-3 h-3" />
+                消息字体大小
+              </label>
+              <div className="flex gap-1.5">
+                {([
+                  { value: 'sm', label: '小' },
+                  { value: 'base', label: '中' },
+                  { value: 'lg', label: '大' },
+                ] as const).map((size) => (
+                  <button
+                    key={size.value}
+                    onClick={() => { playClick(); setFontSize(size.value); }}
+                    className={cn(
+                      'px-3 py-1.5 rounded-lg text-xs transition-all duration-200',
+                      settings.fontSize === size.value
+                        ? darkMode
+                          ? 'bg-cyan-500/15 border border-cyan-500/30 text-cyan-400'
+                          : 'bg-indigo-50 border border-indigo-200 text-indigo-600'
+                        : darkMode
+                          ? 'bg-white/[0.02] border border-white/[0.06] text-gray-500 hover:border-white/[0.12]'
+                          : 'bg-gray-50 border border-gray-200 text-gray-400 hover:border-gray-300'
+                    )}
+                  >
+                    {size.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Show timestamps */}
+            <div className="mb-4">
+              <button
+                onClick={() => { playClick(); setShowTimestamps(!settings.showTimestamps); }}
+                className="flex items-center gap-2.5 w-full"
+              >
+                <div className={cn(
+                  'relative w-9 h-5 rounded-full transition-colors duration-200',
+                  settings.showTimestamps
+                    ? darkMode ? 'bg-cyan-500/30' : 'bg-indigo-500'
+                    : darkMode ? 'bg-white/[0.08]' : 'bg-gray-200'
+                )}>
+                  <div className={cn(
+                    'absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200 bg-white shadow-sm',
+                    settings.showTimestamps ? 'left-[18px]' : 'left-[2px]'
+                  )} />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Clock className={cn('w-3.5 h-3.5', darkMode ? 'text-gray-400' : 'text-gray-500')} />
+                  <span className={cn('text-xs', darkMode ? 'text-gray-300' : 'text-gray-600')}>
+                    显示消息时间
+                  </span>
+                </div>
+              </button>
+            </div>
+          </section>
+
+          {/* ═══ Data Management ═══ */}
+          <section>
+            <h3 className={cn(
+              'flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider mb-3',
+              darkMode ? 'text-gray-500' : 'text-gray-400'
+            )}>
+              <Download className="w-3 h-3" />
+              数据管理
+            </h3>
+
+            <div className="flex flex-wrap gap-2">
+              {/* Export settings */}
+              <button
+                onClick={() => {
+                  playClick();
+                  const json = exportSettings();
+                  const blob = new Blob([json], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'deepseek-chat-settings.json';
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  toast('设置已导出', 'success');
+                }}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all duration-200',
+                  darkMode
+                    ? 'bg-white/[0.03] border border-white/[0.06] text-gray-400 hover:text-cyan-400 hover:border-cyan-500/30'
+                    : 'bg-gray-50 border border-gray-200 text-gray-500 hover:text-indigo-600'
+                )}
+              >
+                <Download className="w-3 h-3" />
+                导出设置
+              </button>
+
+              {/* Import settings */}
+              <button
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.json';
+                  input.onchange = async (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0];
+                    if (!file) return;
+                    const text = await file.text();
+                    const ok = importSettings(text);
+                    if (ok) {
+                      toast('设置已导入', 'success');
+                    } else {
+                      toast('导入失败：无效的 JSON 格式', 'error');
+                    }
+                  };
+                  input.click();
+                }}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all duration-200',
+                  darkMode
+                    ? 'bg-white/[0.03] border border-white/[0.06] text-gray-400 hover:text-emerald-400 hover:border-emerald-500/30'
+                    : 'bg-gray-50 border border-gray-200 text-gray-500 hover:text-emerald-600'
+                )}
+              >
+                <Upload className="w-3 h-3" />
+                导入设置
+              </button>
+
+              {/* Reset settings */}
+              <button
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: '重置设置',
+                    message: '确定要将所有设置恢复为默认值吗？此操作不可撤销。',
+                    variant: 'danger',
+                    confirmLabel: '重置',
+                  });
+                  if (!ok) return;
+                  playClick();
+                  resetSettings();
+                  toast('所有设置已恢复默认', 'success');
+                }}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all duration-200',
+                  darkMode
+                    ? 'bg-white/[0.03] border border-white/[0.06] text-gray-400 hover:text-red-400 hover:border-red-500/30'
+                    : 'bg-gray-50 border border-gray-200 text-gray-500 hover:text-red-500'
+                )}
+              >
+                <RotateCcw className="w-3 h-3" />
+                重置设置
+              </button>
+            </div>
           </section>
 
           {/* Footer info */}

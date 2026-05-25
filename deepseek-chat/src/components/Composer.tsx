@@ -1,8 +1,15 @@
-import { useState, useRef, useEffect, forwardRef, type KeyboardEvent } from 'react';
-import { Send, Square, Paperclip, Globe, X, Image, FileText } from 'lucide-react';
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle, type KeyboardEvent } from 'react';
+import { Send, Square, Paperclip, Globe, X, Image, FileText, BookOpen } from 'lucide-react';
 import type { ModelName } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
 import { playClick, playDelete } from '../lib/sound';
+
+export interface ComposerHandle {
+  /** Insert text at cursor position (or append), updating React state */
+  insertText: (text: string) => void;
+  /** The underlying textarea element */
+  textarea: HTMLTextAreaElement | null;
+}
 
 interface ComposerProps {
   onSend: (
@@ -15,6 +22,7 @@ interface ComposerProps {
   model?: ModelName;
   webSearch?: boolean;
   onToggleWebSearch?: () => void;
+  onOpenPromptLibrary?: () => void;
 }
 
 interface PendingFile {
@@ -50,22 +58,39 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(
-  function Composer({ onSend, onStop, isStreaming, disabled, model, webSearch, onToggleWebSearch }, ref) {
+export const Composer = forwardRef<ComposerHandle, ComposerProps>(
+  function Composer({ onSend, onStop, isStreaming, disabled, model, webSearch, onToggleWebSearch, onOpenPromptLibrary }, ref) {
     const [input, setInput] = useState('');
     const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
     const innerRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const textareaRef = ref || innerRef;
     const darkMode = useSettingsStore((s) => s.settings.darkMode);
     const charCount = input.length;
     const tokenEstimate = estimateTokens(input);
 
-    // Merge refs
-    useEffect(() => {
-      if (typeof textareaRef === 'function') textareaRef(innerRef.current);
-      else if (textareaRef) (textareaRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = innerRef.current;
-    }, [textareaRef]);
+    // Expose imperative handle
+    useImperativeHandle(ref, () => ({
+      textarea: innerRef.current,
+      insertText: (text: string) => {
+        const el = innerRef.current;
+        if (!el) return;
+        const current = el.value;
+        if (!current.trim()) {
+          setInput(text);
+        } else {
+          const cursor = el.selectionStart ?? current.length;
+          const before = current.slice(0, cursor);
+          const after = current.slice(cursor);
+          const newValue = `${before}\n\n${text}${after}`;
+          setInput(newValue);
+          // Restore cursor position after React re-render
+          requestAnimationFrame(() => {
+            el.focus();
+            el.selectionStart = el.selectionEnd = (before + '\n\n' + text).length;
+          });
+        }
+      },
+    }), []);
 
     // Auto-resize
     useEffect(() => {
@@ -253,6 +278,20 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(
 
             {/* Action buttons */}
             <div className="flex items-center gap-1 flex-shrink-0">
+              {/* Prompt library */}
+              <button
+                onClick={() => { playClick(); onOpenPromptLibrary?.(); }}
+                disabled={isStreaming || disabled}
+                className={`p-2 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+                  darkMode
+                    ? 'text-white/35 hover:text-purple-400 hover:bg-white/[0.06]'
+                    : 'text-gray-400 hover:text-indigo-600 hover:bg-gray-200/60'
+                }`}
+                title="提示词库 (Ctrl+P)"
+              >
+                <BookOpen className="w-4 h-4" />
+              </button>
+
               {/* Upload file */}
               <button
                 onClick={() => { playClick(); fileInputRef.current?.click(); }}

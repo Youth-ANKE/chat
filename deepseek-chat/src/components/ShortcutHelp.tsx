@@ -11,11 +11,13 @@ const SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ['Ctrl', 'E'], label: '聚焦输入框' },
   { keys: ['Ctrl', 'Shift', 'E'], label: '导出当前对话' },
   { keys: ['Ctrl', 'K'], label: '清空当前对话' },
-  { keys: ['Ctrl', '/'], label: '显示/隐藏快捷键' },
+  { keys: ['Ctrl', 'F'], label: '搜索对话内容' },
+  { keys: ['Ctrl', 'P'], label: '打开提示词库' },
   { keys: ['Ctrl', 'B'], label: '切换侧栏' },
+  { keys: ['Ctrl', '/'], label: '显示/隐藏快捷键' },
   { keys: ['Enter'], label: '发送消息' },
   { keys: ['Shift', 'Enter'], label: '消息换行' },
-  { keys: ['Escape'], label: '关闭面板' },
+  { keys: ['Escape'], label: '关闭面板/取消搜索' },
 ];
 
 export function ShortcutHelp({ open, onClose }: ShortcutHelpProps) {

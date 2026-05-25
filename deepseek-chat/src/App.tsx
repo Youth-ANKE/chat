@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ChatLayout } from './components/ChatLayout';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { ToastProvider } from './components/Toast';
+import { ConfirmProvider } from './components/ConfirmDialog';
 import { useChatStore } from './stores/chatStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { playStartup, playBootTick, playBootReady, setSoundEnabled as applySoundEnabled } from './lib/sound';
@@ -27,11 +30,9 @@ function SplashScreen() {
 
   return (
     <div className="h-full flex flex-col items-center justify-center bg-[#030312] overflow-hidden">
-      {/* Animated tech grid */}
       <div className="absolute inset-0 tech-grid opacity-30" />
 
       <div className="relative z-10 text-center animate-scale-in">
-        {/* Glowing logo */}
         <div className="relative inline-flex mb-8">
           <div className="absolute inset-0 rounded-full bg-cyan-400/20 blur-2xl animate-pulse" />
           <div className="relative w-16 h-16 rounded-2xl gradient-cyber flex items-center justify-center shadow-[0_0_30px_rgba(0,229,255,0.3)]">
@@ -46,7 +47,6 @@ function SplashScreen() {
           </span>
         </h1>
 
-        {/* Boot sequence */}
         <div className="space-y-2 font-mono text-xs">
           {bootLines.slice(0, bootStep).map((line, i) => (
             <div
@@ -80,14 +80,13 @@ function App() {
   const init = useChatStore((s) => s.init);
   const darkMode = useSettingsStore((s) => s.settings.darkMode);
   const soundEnabled = useSettingsStore((s) => s.settings.soundEnabled);
+  const fontSize = useSettingsStore((s) => s.settings.fontSize);
 
-  // Sync sound engine with persisted setting
   useEffect(() => {
     applySoundEnabled(soundEnabled);
   }, [soundEnabled]);
 
   useEffect(() => {
-    // Slight delay for boot animation
     const t = setTimeout(() => {
       init().finally(() => {
         setInitializing(false);
@@ -101,9 +100,23 @@ function App() {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
 
+  // Apply font size class
+  useEffect(() => {
+    document.documentElement.classList.remove('font-size-sm', 'font-size-base', 'font-size-lg');
+    document.documentElement.classList.add(`font-size-${fontSize}`);
+  }, [fontSize]);
+
   if (initializing) return <SplashScreen />;
 
-  return <ChatLayout />;
+  return (
+    <ErrorBoundary>
+      <ToastProvider>
+        <ConfirmProvider>
+          <ChatLayout />
+        </ConfirmProvider>
+      </ToastProvider>
+    </ErrorBoundary>
+  );
 }
 
 export default App;

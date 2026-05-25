@@ -38,6 +38,8 @@ export interface ChatSession {
   updatedAt: string;
 }
 
+export type AccentColor = 'cyan' | 'purple' | 'emerald' | 'amber' | 'rose' | 'blue';
+
 export interface Settings {
   darkMode: boolean;
   soundEnabled: boolean;
@@ -55,6 +57,12 @@ export interface Settings {
   topP: number;
   maxTokens: number;
   streamOutput: boolean;
+  /** 主题强调色 */
+  accentColor: AccentColor;
+  /** 消息字体大小 */
+  fontSize: 'sm' | 'base' | 'lg';
+  /** 是否显示消息时间 */
+  showTimestamps: boolean;
 }
 
 // ── Usage / Cost Tracking ──
@@ -111,7 +119,19 @@ export const DEFAULT_SETTINGS: Settings = {
   topP: 1.0,
   maxTokens: 4096,
   streamOutput: true,
+  accentColor: 'cyan',
+  fontSize: 'base',
+  showTimestamps: true,
 };
+
+export const ACCENT_COLORS: { value: AccentColor; label: string; class: string; glow: string }[] = [
+  { value: 'cyan', label: '科技蓝', class: 'bg-cyan-500', glow: 'rgba(0,229,255,0.4)' },
+  { value: 'purple', label: '星云紫', class: 'bg-purple-500', glow: 'rgba(179,102,255,0.4)' },
+  { value: 'emerald', label: '翡翠绿', class: 'bg-emerald-500', glow: 'rgba(0,255,136,0.4)' },
+  { value: 'amber', label: '日落金', class: 'bg-amber-500', glow: 'rgba(251,191,36,0.4)' },
+  { value: 'rose', label: '玫瑰红', class: 'bg-rose-500', glow: 'rgba(244,63,94,0.4)' },
+  { value: 'blue', label: '深海蓝', class: 'bg-blue-500', glow: 'rgba(68,136,255,0.4)' },
+];
 
 export const MODEL_OPTIONS: { value: ModelName; label: string; desc: string }[] = [
   { value: 'deepseek-v4-flash', label: 'V4 Flash', desc: '快速、低成本' },

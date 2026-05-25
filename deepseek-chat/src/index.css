@@ -445,3 +445,117 @@
 @keyframes ping {
   75%, 100% { transform: scale(1.8); opacity: 0; }
 }
+
+/* Toast notification animation */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-toast-in {
+  animation: toast-in 0.2s ease-out forwards;
+}
+
+/* Smooth slide transitions for panels */
+@keyframes slide-in-from-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slide-out-to-right {
+  from { transform: translateX(0); opacity: 1; }
+  to   { transform: translateX(100%); opacity: 0; }
+}
+
+.animate-slide-panel-in {
+  animation: slide-in-from-right 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-panel-out {
+  animation: slide-out-to-right 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Smooth message appear */
+@keyframes message-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-message-in {
+  animation: message-in 0.25s ease-out forwards;
+}
+
+/* Smooth hover lift effect */
+.hover-lift {
+  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
+}
+.hover-lift:hover {
+  transform: translateY(-1px);
+}
+
+/* Accent color CSS variables -- applied via JS */
+:root {
+  --accent-rgb: 0, 229, 255;
+}
+
+/* Message content font size variants */
+.font-size-sm .message-content { font-size: 0.8125rem; line-height: 1.65; }
+.font-size-base .message-content { font-size: 0.875rem; line-height: 1.7; }
+.font-size-lg .message-content { font-size: 0.9375rem; line-height: 1.75; }
+
+/* Smooth button press */
+.btn-press {
+  transition: transform 0.1s ease;
+}
+.btn-press:active {
+  transform: scale(0.96);
+}
+
+/* Enhanced glass with better edge highlight */
+.glass-enhanced {
+  background: rgba(13,13,43,0.8);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 
+    0 4px 24px rgba(0,0,0,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+/* Message bubble hover glow */
+.message-glow {
+  transition: box-shadow 0.2s ease;
+}
+.message-glow:hover {
+  box-shadow: inset 0 0 0 1px rgba(0,229,255,0.05);
+}
+
+/* Keyboard shortcut key */
+kbd.shortcut-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.4);
+  font-size: 10px;
+  font-family: 'Inter', 'SF Mono', monospace;
+  line-height: 1;
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+  .w-sidebar {
+    width: 100vw;
+    max-width: 300px;
+  }
+  .message-content pre {
+    margin-left: -1rem;
+    margin-right: -1rem;
+    border-radius: 0;
+  }
+}

@@ -1,9 +1,29 @@
 import { create } from 'zustand';
-import type { Settings } from '../types';
+import type { Settings, AccentColor } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
 import { setSoundEnabled as applySoundEnabled, playThemeToggle } from '../lib/sound';
 import { setSpeechEnabled as applySpeechEnabled, setSpeechVoice as applySpeechVoice } from '../lib/speech';
 import { setMusicEnabled as applyMusicEnabled, setMusicMode as applyMusicMode, setMusicVolume as applyMusicVolume, type MusicMode } from '../lib/music';
+
+const STORAGE_KEY = 'deepseek_settings_v2';
+
+/** Load persisted settings, merged with defaults for new fields */
+function loadSettings(): Settings {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_SETTINGS };
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_SETTINGS, ...parsed };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function persistSettings(settings: Settings) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  } catch { /* quota exceeded, ignore */ }
+}
 
 interface SettingsState {
   settings: Settings;
@@ -26,48 +46,88 @@ interface SettingsState {
   setTopP: (v: number) => void;
   setMaxTokens: (v: number) => void;
   setStreamOutput: (v: boolean) => void;
+  setAccentColor: (color: AccentColor) => void;
+  setFontSize: (size: Settings['fontSize']) => void;
+  setShowTimestamps: (on: boolean) => void;
+  /** Export settings as JSON string */
+  exportSettings: () => string;
+  /** Import settings from JSON string, returns success */
+  importSettings: (json: string) => boolean;
+  /** Reset all settings to defaults */
+  resetSettings: () => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
-  settings: { ...DEFAULT_SETTINGS },
+  settings: loadSettings(),
 
+  // ── Theme ──
   toggleDarkMode: () => {
     const next = !get().settings.darkMode;
-    set((state) => ({ settings: { ...state.settings, darkMode: next } }));
+    set((state) => {
+      const s = { ...state.settings, darkMode: next };
+      persistSettings(s);
+      return { settings: s };
+    });
     document.documentElement.classList.toggle('dark', next);
     playThemeToggle();
   },
 
   setDarkMode: (on) => {
-    set((state) => ({ settings: { ...state.settings, darkMode: on } }));
+    set((state) => {
+      const s = { ...state.settings, darkMode: on };
+      persistSettings(s);
+      return { settings: s };
+    });
     document.documentElement.classList.toggle('dark', on);
     playThemeToggle();
   },
 
+  // ── Sound ──
   toggleSoundEnabled: () => {
     const next = !get().settings.soundEnabled;
-    set((state) => ({ settings: { ...state.settings, soundEnabled: next } }));
+    set((state) => {
+      const s = { ...state.settings, soundEnabled: next };
+      persistSettings(s);
+      return { settings: s };
+    });
     applySoundEnabled(next);
   },
 
   setSoundEnabled: (on) => {
-    set((state) => ({ settings: { ...state.settings, soundEnabled: on } }));
+    set((state) => {
+      const s = { ...state.settings, soundEnabled: on };
+      persistSettings(s);
+      return { settings: s };
+    });
     applySoundEnabled(on);
   },
 
+  // ── Speech ──
   toggleSpeechEnabled: () => {
     const next = !get().settings.speechEnabled;
-    set((state) => ({ settings: { ...state.settings, speechEnabled: next } }));
+    set((state) => {
+      const s = { ...state.settings, speechEnabled: next };
+      persistSettings(s);
+      return { settings: s };
+    });
     applySpeechEnabled(next);
   },
 
   setSpeechEnabled: (on) => {
-    set((state) => ({ settings: { ...state.settings, speechEnabled: on } }));
+    set((state) => {
+      const s = { ...state.settings, speechEnabled: on };
+      persistSettings(s);
+      return { settings: s };
+    });
     applySpeechEnabled(on);
   },
 
   setSpeechVoice: (voiceURI) => {
-    set((state) => ({ settings: { ...state.settings, speechVoice: voiceURI } }));
+    set((state) => {
+      const s = { ...state.settings, speechVoice: voiceURI };
+      persistSettings(s);
+      return { settings: s };
+    });
     applySpeechVoice(voiceURI);
   },
 
@@ -77,49 +137,151 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const next = favs.includes(voiceURI)
         ? favs.filter((v) => v !== voiceURI)
         : [...favs, voiceURI];
-      return { settings: { ...state.settings, favoriteVoices: next } };
+      const s = { ...state.settings, favoriteVoices: next };
+      persistSettings(s);
+      return { settings: s };
     });
   },
 
+  // ── Music ──
   toggleMusicEnabled: () => {
     const next = !get().settings.musicEnabled;
-    set((state) => ({ settings: { ...state.settings, musicEnabled: next } }));
+    set((state) => {
+      const s = { ...state.settings, musicEnabled: next };
+      persistSettings(s);
+      return { settings: s };
+    });
     applyMusicEnabled(next);
   },
 
   setMusicEnabled: (on) => {
-    set((state) => ({ settings: { ...state.settings, musicEnabled: on } }));
+    set((state) => {
+      const s = { ...state.settings, musicEnabled: on };
+      persistSettings(s);
+      return { settings: s };
+    });
     applyMusicEnabled(on);
   },
 
   setMusicMode: (mode) => {
-    set((state) => ({ settings: { ...state.settings, musicMode: mode } }));
+    set((state) => {
+      const s = { ...state.settings, musicMode: mode };
+      persistSettings(s);
+      return { settings: s };
+    });
     applyMusicMode(mode);
   },
 
   setMusicVolume: (vol) => {
-    set((state) => ({ settings: { ...state.settings, musicVolume: vol } }));
+    set((state) => {
+      const s = { ...state.settings, musicVolume: vol };
+      persistSettings(s);
+      return { settings: s };
+    });
     applyMusicVolume(vol);
   },
 
+  // ── Model defaults ──
   setDefaultModel: (model) =>
-    set((state) => ({ settings: { ...state.settings, defaultModel: model } })),
+    set((state) => {
+      const s = { ...state.settings, defaultModel: model };
+      persistSettings(s);
+      return { settings: s };
+    }),
 
   setDefaultTemperature: (t) =>
-    set((state) => ({ settings: { ...state.settings, defaultTemperature: t } })),
+    set((state) => {
+      const s = { ...state.settings, defaultTemperature: t };
+      persistSettings(s);
+      return { settings: s };
+    }),
 
   setDefaultThinking: (on) =>
-    set((state) => ({ settings: { ...state.settings, defaultThinking: on } })),
+    set((state) => {
+      const s = { ...state.settings, defaultThinking: on };
+      persistSettings(s);
+      return { settings: s };
+    }),
 
   setContextLimit: (v) =>
-    set((state) => ({ settings: { ...state.settings, contextLimit: v } })),
+    set((state) => {
+      const s = { ...state.settings, contextLimit: v };
+      persistSettings(s);
+      return { settings: s };
+    }),
 
   setTopP: (v) =>
-    set((state) => ({ settings: { ...state.settings, topP: v } })),
+    set((state) => {
+      const s = { ...state.settings, topP: v };
+      persistSettings(s);
+      return { settings: s };
+    }),
 
   setMaxTokens: (v) =>
-    set((state) => ({ settings: { ...state.settings, maxTokens: v } })),
+    set((state) => {
+      const s = { ...state.settings, maxTokens: v };
+      persistSettings(s);
+      return { settings: s };
+    }),
 
   setStreamOutput: (v) =>
-    set((state) => ({ settings: { ...state.settings, streamOutput: v } })),
+    set((state) => {
+      const s = { ...state.settings, streamOutput: v };
+      persistSettings(s);
+      return { settings: s };
+    }),
+
+  // ── New settings ──
+  setAccentColor: (color) =>
+    set((state) => {
+      const s = { ...state.settings, accentColor: color };
+      persistSettings(s);
+      return { settings: s };
+    }),
+
+  setFontSize: (size) =>
+    set((state) => {
+      const s = { ...state.settings, fontSize: size };
+      persistSettings(s);
+      return { settings: s };
+    }),
+
+  setShowTimestamps: (on) =>
+    set((state) => {
+      const s = { ...state.settings, showTimestamps: on };
+      persistSettings(s);
+      return { settings: s };
+    }),
+
+  // ── Import / Export / Reset ──
+  exportSettings: () => {
+    return JSON.stringify(get().settings, null, 2);
+  },
+
+  importSettings: (json) => {
+    try {
+      const parsed = JSON.parse(json);
+      const merged = { ...DEFAULT_SETTINGS, ...parsed };
+      set({ settings: merged });
+      persistSettings(merged);
+      // Apply side effects
+      document.documentElement.classList.toggle('dark', merged.darkMode);
+      applySoundEnabled(merged.soundEnabled);
+      if (merged.musicEnabled) applyMusicEnabled(true);
+      else applyMusicEnabled(false);
+      if (merged.speechEnabled) applySpeechEnabled(true);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  resetSettings: () => {
+    set({ settings: { ...DEFAULT_SETTINGS } });
+    persistSettings(DEFAULT_SETTINGS);
+    document.documentElement.classList.toggle('dark', DEFAULT_SETTINGS.darkMode);
+    applySoundEnabled(DEFAULT_SETTINGS.soundEnabled);
+    applyMusicEnabled(false);
+    applySpeechEnabled(false);
+  },
 }));

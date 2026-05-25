@@ -1,10 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { MessageList } from './MessageList';
-import { Composer } from './Composer';
+import { Composer, type ComposerHandle } from './Composer';
 import { SettingsPanel } from './SettingsPanel';
 import { ShortcutHelp } from './ShortcutHelp';
 import { UsagePanel } from './UsagePanel';
+import { PromptLibrary } from './PromptLibrary';
 import { TechBackground } from './TechBackground';
 import { useChatStore } from '../stores/chatStore';
 import { useUsageStore } from '../stores/usageStore';
@@ -15,6 +16,8 @@ import type { ModelName } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
 import { playClick, playToggleOn, playToggleOff, playSend, playStop, playDelete, playExport, playRegenerate } from '../lib/sound';
 import { speakChunk, flushSpeech, stopSpeech } from '../lib/speech';
+import { useToast } from './Toast';
+import { useConfirm } from './ConfirmDialog';
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 2.5);
@@ -25,10 +28,15 @@ export function ChatLayout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutOpen, setShortcutOpen] = useState(false);
   const [usageOpen, setUsageOpen] = useState(false);
+  const [promptLibraryOpen, setPromptLibraryOpen] = useState(false);
+  const [messageSearch, setMessageSearch] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<ComposerHandle>(null);
+
+  const { toast } = useToast();
+  const { confirm } = useConfirm();
 
   const darkMode = useSettingsStore((s) => s.settings.darkMode);
   const speechEnabled = useSettingsStore((s) => s.settings.speechEnabled);
@@ -75,41 +83,6 @@ export function ChatLayout() {
       titleGeneratedRef.current = false;
     }
   }, [activeMessages.length, session?.id]);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const ctrl = e.ctrlKey || e.metaKey;
-
-      if (ctrl && e.key === '/') {
-        e.preventDefault();
-        setShortcutOpen((v) => !v);
-      }
-      if (ctrl && e.key === 'n') {
-        e.preventDefault();
-        stopSpeech();
-        newSession();
-      }
-      if (ctrl && e.key === 'b') {
-        e.preventDefault();
-        setSidebarCollapsed((v) => !v);
-      }
-      if (ctrl && e.key === 'e' && !e.shiftKey) {
-        e.preventDefault();
-        inputRef.current?.focus();
-      }
-      if (ctrl && e.key === 'E') {
-        e.preventDefault();
-        handleExport();
-      }
-      if (ctrl && e.key === 'k') {
-        e.preventDefault();
-        handleClear();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [activeId, session]);
 
   const doStream = useCallback(
     async (
@@ -345,15 +318,27 @@ export function ChatLayout() {
     a.download = `${session?.title ?? 'conversation'}.md`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [activeId, session, exportConversation]);
+    toast('导出成功', 'success');
+  }, [activeId, session, exportConversation, toast]);
 
-  const handleClear = useCallback(() => {
+  const handleClear = useCallback(async () => {
     if (!activeId) return;
-    playDelete();
     if (activeMessages.length === 0) return;
-    if (!confirm('确定要清空当前对话吗？此操作不可撤销。')) return;
+    const ok = await confirm({
+      title: '清空对话',
+      message: '确定要清空当前对话吗？此操作不可撤销。',
+      variant: 'danger',
+      confirmLabel: '清空',
+    });
+    if (!ok) return;
+    playDelete();
     clearMessages(activeId);
-  }, [activeId, activeMessages, clearMessages]);
+    toast('对话已清空', 'success');
+  }, [activeId, activeMessages, clearMessages, confirm, toast]);
+
+  const handlePromptSelect = useCallback((promptText: string) => {
+    inputRef.current?.insertText(promptText);
+  }, []);
 
   const handleToggleWebSearch = useCallback(() => {
     if (!activeId) return;
@@ -366,6 +351,67 @@ export function ChatLayout() {
   }, [activeId, setWebSearch]);
 
   const totalTokens = activeMessages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const ctrl = e.ctrlKey || e.metaKey;
+
+      if (ctrl && e.key === '/') {
+        e.preventDefault();
+        setShortcutOpen((v) => !v);
+      }
+      if (ctrl && e.key === 'n') {
+        e.preventDefault();
+        stopSpeech();
+        newSession();
+      }
+      if (ctrl && e.key === 'b') {
+        e.preventDefault();
+        setSidebarCollapsed((v) => !v);
+      }
+      if (ctrl && e.key === 'e' && !e.shiftKey) {
+        e.preventDefault();
+        inputRef.current?.textarea?.focus();
+      }
+      if (ctrl && e.key === 'E') {
+        e.preventDefault();
+        handleExport();
+      }
+      if (ctrl && e.key === 'k') {
+        e.preventDefault();
+        handleClear();
+      }
+      if (ctrl && e.key === 'f' && !e.shiftKey) {
+        e.preventDefault();
+        const currentSearch = messageSearch;
+        // toggle search bar via state trick
+        if (!currentSearch) {
+          setMessageSearch('');
+        } else {
+          setMessageSearch('');
+        }
+        // Focus the search input
+        setTimeout(() => {
+          const searchInput = document.querySelector<HTMLInputElement>('[data-search-input]');
+          if (searchInput) {
+            setMessageSearch('');
+            searchInput.focus();
+          }
+        }, 50);
+      }
+      if (ctrl && e.key === 'p') {
+        e.preventDefault();
+        setPromptLibraryOpen((v) => !v);
+      }
+      if (e.key === 'Escape') {
+        setMessageSearch('');
+        setPromptLibraryOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [activeId, session, handleExport, handleClear, messageSearch]);
 
   return (
     <div className={`flex h-full ${darkMode ? 'bg-space-dark text-gray-100' : 'bg-chat text-gray-900'}`}>
@@ -504,6 +550,25 @@ export function ChatLayout() {
         </header>
 
         {/* Messages */}
+        {/* Message search bar */}
+        {messageSearch !== undefined && (
+          <div className={`px-4 py-2 z-10 ${darkMode ? 'bg-black/20 border-b border-white/[0.04]' : 'bg-gray-50/50 border-b border-gray-200'}`}>
+            <div className="max-w-3xl mx-auto">
+              <input
+                data-search-input
+                value={messageSearch}
+                onChange={(e) => setMessageSearch(e.target.value)}
+                placeholder="搜索对话内容… (Ctrl+F)"
+                className={`w-full px-3 py-1.5 rounded-lg text-xs outline-none transition-all ${
+                  darkMode
+                    ? 'bg-white/[0.04] border border-white/[0.06] focus:border-cyan-500/30 text-white/70 placeholder-gray-600'
+                    : 'bg-white border border-gray-200 focus:border-indigo-300 text-gray-700 placeholder-gray-400'
+                }`}
+              />
+            </div>
+          </div>
+        )}
+
         <MessageList
           messages={activeMessages}
           onSend={handleSend}
@@ -511,6 +576,7 @@ export function ChatLayout() {
           onEdit={handleEdit}
           onStartEdit={setEditingMsgId}
           onCancelEdit={() => setEditingMsgId(null)}
+          searchQuery={messageSearch}
         />
 
         {/* Composer */}
@@ -523,6 +589,7 @@ export function ChatLayout() {
           disabled={editingMsgId !== null}
           webSearch={session?.webSearch ?? false}
           onToggleWebSearch={handleToggleWebSearch}
+          onOpenPromptLibrary={() => setPromptLibraryOpen(true)}
         />
       </div>
 
@@ -534,6 +601,14 @@ export function ChatLayout() {
 
       {/* Shortcut help */}
       <ShortcutHelp open={shortcutOpen} onClose={() => { playClick(); setShortcutOpen(false); }} />
+
+      {/* Prompt library */}
+      <PromptLibrary
+        open={promptLibraryOpen}
+        onClose={() => { playClick(); setPromptLibraryOpen(false); }}
+        onSelect={handlePromptSelect}
+        darkMode={darkMode}
+      />
     </div>
   );
 }

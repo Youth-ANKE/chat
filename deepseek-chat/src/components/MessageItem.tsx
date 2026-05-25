@@ -11,6 +11,7 @@ interface MessageItemProps {
   onEdit?: (msgId: string, newContent: string) => void;
   onStartEdit?: (msgId: string) => void;
   onCancelEdit?: () => void;
+  searchHighlight?: string;
 }
 
 function ThinkingDots() {
@@ -95,11 +96,12 @@ function ThinkingBlock({ reasoning, isStreaming }: { reasoning: string; isStream
   );
 }
 
-export function MessageItem({ message, isEditing, onEdit, onStartEdit, onCancelEdit }: MessageItemProps) {
+export function MessageItem({ message, isEditing, onEdit, onStartEdit, onCancelEdit, searchHighlight }: MessageItemProps) {
   const [copied, setCopied] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const editRef = useRef<HTMLTextAreaElement>(null);
   const darkMode = useSettingsStore((s) => s.settings.darkMode);
+  const showTimestamps = useSettingsStore((s) => s.settings.showTimestamps);
 
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
@@ -204,7 +206,7 @@ export function MessageItem({ message, isEditing, onEdit, onStartEdit, onCancelE
           <span className={`text-xs font-semibold ${roleLabelClass}`}>
             {isUser ? '你' : hasError ? '错误' : 'DeepSeek'}
           </span>
-          {message.createdAt && (
+          {message.createdAt && showTimestamps && (
             <span className={timeClass}>{formatTime(message.createdAt)}</span>
           )}
           {hasReasoning && !isStreaming && (

@@ -15,6 +15,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { cn } from '../lib/utils';
 import { playClick, playNewSession, playDelete, playToggleOn, playToggleOff } from '../lib/sound';
 import { stopSpeech } from '../lib/speech';
+import { useConfirm } from './ConfirmDialog';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -51,6 +52,7 @@ function groupByDate(sessions: { id: string; title: string; updatedAt: string; p
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const [search, setSearch] = useState('');
   const darkMode = useSettingsStore((s) => s.settings.darkMode);
+  const { confirm } = useConfirm();
 
   const sessions = useChatStore((s) => s.sessions);
   const activeId = useChatStore((s) => s.activeId);
@@ -251,7 +253,18 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
                   {/* Delete */}
                   <button
-                    onClick={(e) => { e.stopPropagation(); if (confirm('确定要删除此对话吗？')) { playDelete(); deleteSession(sessionItem.id); } }}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const ok = await confirm({
+                        title: '删除对话',
+                        message: `确定要删除「${sessionItem.title}」吗？此操作不可撤销。`,
+                        variant: 'danger',
+                        confirmLabel: '删除',
+                      });
+                      if (!ok) return;
+                      playDelete();
+                      deleteSession(sessionItem.id);
+                    }}
                     className={cn(
                       'opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all',
                       darkMode
