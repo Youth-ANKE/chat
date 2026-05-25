@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { ChatMessage } from '../types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { useSettingsStore } from '../stores/settingsStore';
+import { playClick, playSave } from '../lib/sound';
 
 interface MessageItemProps {
   message: ChatMessage;
@@ -52,7 +53,7 @@ function ThinkingBlock({ reasoning, isStreaming }: { reasoning: string; isStream
     }`}>
       {/* Header */}
       <button
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => { playClick(); setExpanded(!expanded); }}
         className="w-full flex items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-white/[0.02] group/think"
       >
         <Brain className={`w-4 h-4 flex-shrink-0 ${isStreaming ? 'text-purple-400 animate-pulse' : 'text-purple-400/70'}`} />
@@ -118,6 +119,7 @@ export function MessageItem({ message, isEditing, onEdit, onStartEdit, onCancelE
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content);
+    playClick();
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -125,6 +127,7 @@ export function MessageItem({ message, isEditing, onEdit, onStartEdit, onCancelE
   const handleEditSubmit = () => {
     const trimmed = editContent.trim();
     if (trimmed && onEdit) {
+      playSave();
       onEdit(message.id, trimmed);
     }
   };
@@ -287,7 +290,7 @@ export function MessageItem({ message, isEditing, onEdit, onStartEdit, onCancelE
         {!isStreaming && hasContent && !isEditing && (
           <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
             {isUser && onStartEdit && (
-              <button onClick={() => { setEditContent(message.content); onStartEdit(message.id); }} className={actionBtnClass} title="编辑消息">
+              <button onClick={() => { playClick(); setEditContent(message.content); onStartEdit(message.id); }} className={actionBtnClass} title="编辑消息">
                 <Pencil className="w-3 h-3" />编辑
               </button>
             )}

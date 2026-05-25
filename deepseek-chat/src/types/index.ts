@@ -41,6 +41,12 @@ export interface ChatSession {
 export interface Settings {
   darkMode: boolean;
   soundEnabled: boolean;
+  speechEnabled: boolean;
+  speechVoice?: string;
+  favoriteVoices: string[];
+  musicEnabled: boolean;
+  musicMode: 'random' | 'sequential' | '5min' | '10min';
+  musicVolume: number;
   defaultModel: ModelName;
   defaultTemperature: number;
   defaultThinking: boolean;
@@ -92,6 +98,12 @@ export function calculateCost(model: ModelName, inputTokens: number, outputToken
 export const DEFAULT_SETTINGS: Settings = {
   darkMode: true,
   soundEnabled: true,
+  speechEnabled: false,
+  speechVoice: undefined,
+  favoriteVoices: [],
+  musicEnabled: false,
+  musicMode: 'sequential',
+  musicVolume: 27,
   defaultModel: 'deepseek-v4-flash',
   defaultTemperature: 0.7,
   defaultThinking: true,

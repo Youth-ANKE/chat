@@ -7,6 +7,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Copy, Check, Terminal } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
+import { playClick } from '../lib/sound';
 
 interface MarkdownRendererProps {
   content: string;
@@ -43,6 +44,7 @@ function CodeBlock({
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
     setCopied(true);
+    playClick();
     setTimeout(() => setCopied(false), 2000);
   };
 

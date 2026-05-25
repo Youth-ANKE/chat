@@ -3,6 +3,10 @@
     "api/chat.js": {
       "maxDuration": 60,
       "memory": 256
+    },
+    "api/speech.js": {
+      "maxDuration": 30,
+      "memory": 256
     }
   },
   "headers": [

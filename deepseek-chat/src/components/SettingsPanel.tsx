@@ -1,10 +1,12 @@
-import { X, Sun, Moon, Zap, Brain, Thermometer, Cpu, Sparkles, Globe, Sliders, Volume2, VolumeX } from 'lucide-react';
+import { X, Sun, Moon, Zap, Brain, Cpu, Sparkles, Sliders, Volume2, VolumeX, Headphones, Play, Music, Star } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useChatStore } from '../stores/chatStore';
 import { MODEL_OPTIONS } from '../types';
 import { cn } from '../lib/utils';
-import { playSave } from '../lib/sound';
+import { playClick, playToggleOn, playToggleOff, playSave } from '../lib/sound';
+import { getAvailableVoices, previewVoice, AZURE_VOICES, type SpeechVoice } from '../lib/speech';
+import { previewTrack, MUSIC_TRACKS, type MusicMode } from '../lib/music';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -18,6 +20,12 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
     settings,
     toggleDarkMode,
     toggleSoundEnabled,
+    toggleSpeechEnabled,
+    toggleMusicEnabled,
+    setMusicMode,
+    setMusicVolume,
+    setSpeechVoice,
+    toggleSpeechVoiceFavorite,
     setDefaultModel,
     setDefaultTemperature,
     setDefaultThinking,
@@ -40,6 +48,16 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
 
   // Local values for per-session overrides
   const [localPrompt, setLocalPrompt] = useState(session?.systemPrompt ?? '');
+
+  // Available TTS voices (loaded asynchronously in Chrome)
+  const [voices, setVoices] = useState<SpeechVoice[]>([]);
+  const [voiceDropdownOpen, setVoiceDropdownOpen] = useState(false);
+  useEffect(() => {
+    const loadVoices = () => setVoices(getAvailableVoices());
+    loadVoices();
+    window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', loadVoices);
+  }, []);
 
   // Use session-level or global-level values
   const currentTemp = session?.temperature ?? settings.defaultTemperature;
@@ -68,9 +86,6 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
 
   /** Reset a setting back to default for this session */
   const resetContextLimit = () => { setContextLimit(0); };
-  const resetTemp = () => { setDefaultTemperature(0.7); if (activeId) setTemperature(activeId, 0.7); };
-  const resetTopP = () => { setTopP(1.0); if (activeId) setSessionTopP(activeId, 1.0); };
-  const resetMaxTokens = () => { setMaxTokens(4096); if (activeId) setSessionMaxTokens(activeId, 4096); };
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -130,7 +145,11 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 <Sliders className="w-3 h-3" /> 特定模型设置
               </h3>
               <button
-                onClick={resetContextLimit}
+                onClick={() => {
+                  if (settings.contextLimit === 0) return;
+                  resetContextLimit();
+                  playClick();
+                }}
                 disabled={settings.contextLimit === 0}
                 className={`text-[11px] px-2 py-0.5 rounded transition-colors ${
                   settings.contextLimit === 0
@@ -269,10 +288,11 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                     return (
                       <button
                         key={v}
-                        onClick={() => {
-                          setMaxTokens(v);
-                          if (activeId) setSessionMaxTokens(activeId, v);
-                        }}
+                onClick={() => {
+                  setMaxTokens(v);
+                  if (activeId) setSessionMaxTokens(activeId, v);
+                  playClick();
+                }}
                         className={cn(
                           'px-2.5 py-1 rounded-md text-[11px] font-mono transition-all duration-150 border',
                           isActive
@@ -297,6 +317,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                       if (!isNaN(v) && v >= 256 && v <= 32768) {
                         setMaxTokens(v);
                         if (activeId) setSessionMaxTokens(activeId, v);
+                        playClick();
                       } else {
                         alert('请输入 256 ~ 32768 之间的整数');
                       }
@@ -337,7 +358,13 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                   )} title="开启后逐 token 显示回复内容；关闭则等待完整回复后一次性显示">?</span>
                 </div>
                 <button
-                  onClick={() => setStreamOutput(!settings.streamOutput)}
+                  onClick={() => {
+                    setStreamOutput(!settings.streamOutput);
+                    if (settings.streamOutput) playToggleOff();
+                    else playToggleOn();
+                  }}
+
+
                   className={`relative inline-flex h-[22px] w-10 items-center rounded-full transition-colors duration-200 focus:outline-none ${
                     settings.streamOutput ? 'bg-emerald-500' : darkMode ? 'bg-white/15' : 'bg-gray-300'
                   }`}
@@ -440,7 +467,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
             <div className="grid grid-cols-2 gap-2.5">
               {/* Dark mode card */}
               <button
-                onClick={() => !darkMode && toggleDarkMode()}
+                onClick={() => { if (!darkMode) { toggleDarkMode(); } }}
                 disabled={darkMode}
                 className={cn(
                   'relative group rounded-xl border p-3.5 text-left transition-all duration-300 overflow-hidden',
@@ -471,7 +498,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
 
               {/* Light mode card */}
               <button
-                onClick={() => darkMode && toggleDarkMode()}
+                onClick={() => { if (darkMode) { toggleDarkMode(); } }}
                 disabled={!darkMode}
                 className={cn(
                   'relative group rounded-xl border p-3.5 text-left transition-all duration-300 overflow-hidden',
@@ -510,7 +537,10 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
               <Volume2 className="w-3 h-3" /> 音效
             </h3>
             <button
-              onClick={toggleSoundEnabled}
+              onClick={() => {
+                toggleSoundEnabled();
+                settings.soundEnabled ? playToggleOff() : playToggleOn();
+              }}
               className={cn(
                 'w-full rounded-xl border p-3.5 flex items-center gap-3 text-left transition-all duration-300',
                 settings.soundEnabled
@@ -546,6 +576,259 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 <div className={cn('w-2 h-2 rounded-full', darkMode ? 'bg-emerald-400 shadow-[0_0_6px_rgba(0,255,136,0.6)]' : 'bg-indigo-500')} />
               )}
             </button>
+          </section>
+
+          {/* ── Speech / TTS ── */}
+          <section>
+            <h3 className={cn(
+              'text-[10px] font-semibold uppercase tracking-widest mb-3 flex items-center gap-1.5',
+              darkMode ? 'text-gray-500' : 'text-gray-400'
+            )}>
+              <Headphones className="w-3 h-3" /> 朗读回答
+            </h3>
+            <button
+              onClick={() => {
+                toggleSpeechEnabled();
+                settings.speechEnabled ? playToggleOff() : playToggleOn();
+              }}
+              className={cn(
+                'w-full rounded-xl border p-3.5 flex items-center gap-3 text-left transition-all duration-300',
+                settings.speechEnabled
+                  ? darkMode
+                    ? 'border-purple-500/30 bg-gradient-to-r from-purple-500/[0.06] to-pink-500/[0.04] shadow-[0_0_12px_rgba(179,102,255,0.06)]'
+                    : 'border-purple-300 bg-purple-50'
+                  : darkMode
+                    ? 'border-white/[0.06] hover:border-white/[0.12]'
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+              )}
+            >
+              <div className={cn(
+                'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0',
+                settings.speechEnabled
+                  ? darkMode ? 'bg-purple-500/15' : 'bg-purple-100'
+                  : darkMode ? 'bg-white/[0.04]' : 'bg-gray-100'
+              )}>
+                <Headphones className={cn('w-5 h-5', darkMode ? 'text-purple-400' : 'text-purple-600')} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className={cn('text-sm font-medium', darkMode ? 'text-white/80' : 'text-gray-700')}>
+                  {settings.speechEnabled ? '朗读已开启' : '朗读已关闭'}
+                </div>
+                <div className={cn('text-[11px] mt-0.5', darkMode ? 'text-gray-500' : 'text-gray-400')}>
+                  流式输出时自动朗读 AI 回复
+                </div>
+              </div>
+              {settings.speechEnabled && (
+                <div className={cn('w-2 h-2 rounded-full', darkMode ? 'bg-purple-400 shadow-[0_0_6px_rgba(179,102,255,0.6)]' : 'bg-purple-500')} />
+              )}
+            </button>
+
+            {/* Voice selector */}
+            {settings.speechEnabled && voices.length > 0 && (
+              <div className="mt-2.5 relative">
+                <label className={cn(
+                  'text-[11px] font-medium mb-1.5 block',
+                  darkMode ? 'text-gray-500' : 'text-gray-500'
+                )}>
+                  语音选择
+                </label>
+                <button
+                  onClick={() => { playClick(); setVoiceDropdownOpen(!voiceDropdownOpen); }}
+                  className={cn(
+                    'w-full rounded-lg border px-3 py-2 text-xs outline-none transition-all flex items-center justify-between',
+                    darkMode
+                      ? 'bg-white/[0.03] border-white/[0.08] text-white/75 hover:border-purple-500/30 focus:border-purple-500/30'
+                      : 'bg-gray-100 border-gray-200 text-gray-700 hover:border-purple-300 focus:border-purple-300'
+                  )}
+                >
+                  <span className="truncate pr-4">
+                    {(settings.speechVoice && [...AZURE_VOICES, ...voices].find(v => v.voiceURI === settings.speechVoice))
+                      ? `${[...AZURE_VOICES, ...voices].find(v => v.voiceURI === settings.speechVoice)!.name} (${[...AZURE_VOICES, ...voices].find(v => v.voiceURI === settings.speechVoice)!.lang})`
+                      : '系统默认'}
+                  </span>
+                  <svg className="w-3 h-3 flex-shrink-0 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+
+                {/* Dropdown popup */}
+                {voiceDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-[60]" onClick={() => setVoiceDropdownOpen(false)} />
+                    <div className={cn(
+                      'absolute left-0 right-0 top-full mt-1 rounded-lg border shadow-xl z-[61] overflow-hidden max-h-[300px] overflow-y-auto custom-scrollbar',
+                      darkMode ? 'bg-[#161825] border-white/[0.08]' : 'bg-white border-gray-200'
+                    )}>
+                      {/* 系统默认 */}
+                      <div
+                        onClick={() => { setSpeechVoice(''); setVoiceDropdownOpen(false); }}
+                        className={cn(
+                          'px-3 py-2 text-xs cursor-pointer truncate transition-colors flex items-center justify-between gap-2',
+                          !settings.speechVoice
+                            ? darkMode ? 'bg-purple-500/15 text-purple-300' : 'bg-purple-50 text-purple-600'
+                            : darkMode ? 'text-gray-400 hover:bg-white/[0.06] hover:text-white/70' : 'text-gray-600 hover:bg-gray-50'
+                        )}
+                      >
+                        <span className="truncate">系统默认</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); previewVoice(undefined); }}
+                          className={cn(
+                            'flex-shrink-0 p-1 rounded transition-colors',
+                            darkMode ? 'hover:bg-white/[0.1] text-gray-500 hover:text-white/70' : 'hover:bg-gray-200 text-gray-400 hover:text-gray-600'
+                          )}
+                          title="试听"
+                        >
+                          <Play className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      {/* Azure Neural 语音 */}
+                      <div className={cn(
+                        'px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider',
+                        darkMode ? 'text-blue-400/60' : 'text-blue-500'
+                      )}>
+                        ☁️ Azure Neural 语音
+                      </div>
+                      {AZURE_VOICES.map((v) => {
+                        const isActive = settings.speechVoice === v.voiceURI;
+                        return (
+                          <div
+                            key={v.voiceURI}
+                            onClick={() => { setSpeechVoice(v.voiceURI); setVoiceDropdownOpen(false); }}
+                            className={cn(
+                              'px-3 py-2 text-xs cursor-pointer truncate transition-colors flex items-center justify-between gap-1',
+                              isActive
+                                ? darkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-600'
+                                : darkMode ? 'text-gray-400 hover:bg-white/[0.06] hover:text-white/70' : 'text-gray-600 hover:bg-gray-50'
+                            )}
+                            title={`${v.name} (${v.lang}) — 点击选择，需要 Azure 语音服务`}
+                          >
+                            <span className="truncate flex-1">{v.name} ({v.lang})</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); previewVoice(v.voiceURI); }}
+                              className={cn(
+                                'flex-shrink-0 p-1 rounded transition-colors',
+                                darkMode ? 'hover:bg-white/[0.1] text-gray-500 hover:text-white/70' : 'hover:bg-gray-200 text-gray-400 hover:text-gray-600'
+                              )}
+                              title="试听此语音"
+                            >
+                              <Play className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleSpeechVoiceFavorite(v.voiceURI); playClick(); }}
+                              className={cn(
+                                'flex-shrink-0 p-1 rounded transition-colors',
+                                settings.favoriteVoices.includes(v.voiceURI)
+                                  ? 'text-yellow-400 hover:bg-white/[0.1]'
+                                  : darkMode ? 'hover:bg-white/[0.1] text-gray-600 hover:text-yellow-400' : 'hover:bg-gray-200 text-gray-300 hover:text-yellow-500'
+                              )}
+                              title={settings.favoriteVoices.includes(v.voiceURI) ? '取消收藏' : '收藏此语音'}
+                            >
+                              <Star className={cn('w-3 h-3', settings.favoriteVoices.includes(v.voiceURI) && 'fill-current')} />
+                            </button>
+                          </div>
+                        );
+                      })}
+
+                      {/* 收藏语音 */}
+                      {settings.favoriteVoices.length > 0 && (
+                        <>
+                          <div className={cn(
+                            'px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider',
+                            darkMode ? 'text-yellow-500/60' : 'text-yellow-600'
+                          )}>
+                            ⭐ 收藏语音
+                          </div>
+                          {voices.filter(v => settings.favoriteVoices.includes(v.voiceURI)).map((v) => {
+                            const isActive = settings.speechVoice === v.voiceURI;
+                            return (
+                              <div
+                                key={v.voiceURI}
+                                onClick={() => { setSpeechVoice(v.voiceURI); setVoiceDropdownOpen(false); }}
+                                className={cn(
+                                  'px-3 py-2 text-xs cursor-pointer truncate transition-colors flex items-center justify-between gap-1',
+                                  isActive
+                                    ? darkMode ? 'bg-purple-500/15 text-purple-300' : 'bg-purple-50 text-purple-600'
+                                    : darkMode ? 'text-gray-400 hover:bg-white/[0.06] hover:text-white/70' : 'text-gray-600 hover:bg-gray-50'
+                                )}
+                                title={`${v.name} (${v.lang}) — 点击选择，点击 ▶ 试听`}
+                              >
+                                <span className="truncate flex-1">{v.name} ({v.lang})</span>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); previewVoice(v.voiceURI); }}
+                                  className={cn(
+                                    'flex-shrink-0 p-1 rounded transition-colors',
+                                    darkMode ? 'hover:bg-white/[0.1] text-gray-500 hover:text-white/70' : 'hover:bg-gray-200 text-gray-400 hover:text-gray-600'
+                                  )}
+                                  title="试听此语音"
+                                >
+                                  <Play className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); toggleSpeechVoiceFavorite(v.voiceURI); playClick(); }}
+                                  className="flex-shrink-0 p-1 rounded transition-colors text-yellow-400 hover:bg-white/[0.1]"
+                                  title="取消收藏"
+                                >
+                                  <Star className="w-3 h-3 fill-current" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </>
+                      )}
+
+                      {/* 其他语音 */}
+                      {voices.filter(v => !settings.favoriteVoices.includes(v.voiceURI)).length > 0 && (
+                        <>
+                          <div className={cn(
+                            'px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider',
+                            darkMode ? 'text-gray-600' : 'text-gray-400'
+                          )}>
+                            其他语音
+                          </div>
+                          {voices.filter(v => !settings.favoriteVoices.includes(v.voiceURI)).map((v) => {
+                            const isActive = settings.speechVoice === v.voiceURI;
+                            return (
+                              <div
+                                key={v.voiceURI}
+                                onClick={() => { setSpeechVoice(v.voiceURI); setVoiceDropdownOpen(false); }}
+                                className={cn(
+                                  'px-3 py-2 text-xs cursor-pointer truncate transition-colors flex items-center justify-between gap-1',
+                                  isActive
+                                    ? darkMode ? 'bg-purple-500/15 text-purple-300' : 'bg-purple-50 text-purple-600'
+                                    : darkMode ? 'text-gray-400 hover:bg-white/[0.06] hover:text-white/70' : 'text-gray-600 hover:bg-gray-50'
+                                )}
+                                title={`${v.name} (${v.lang}) — 点击选择，点击 ▶ 试听`}
+                              >
+                                <span className="truncate flex-1">{v.name} ({v.lang})</span>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); previewVoice(v.voiceURI); }}
+                                  className={cn(
+                                    'flex-shrink-0 p-1 rounded transition-colors',
+                                    darkMode ? 'hover:bg-white/[0.1] text-gray-500 hover:text-white/70' : 'hover:bg-gray-200 text-gray-400 hover:text-gray-600'
+                                  )}
+                                  title="试听此语音"
+                                >
+                                  <Play className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); toggleSpeechVoiceFavorite(v.voiceURI); playClick(); }}
+                                  className={cn(
+                                    'flex-shrink-0 p-1 rounded transition-colors',
+                                    darkMode ? 'hover:bg-white/[0.1] text-gray-600 hover:text-yellow-400' : 'hover:bg-gray-200 text-gray-300 hover:text-yellow-500'
+                                  )}
+                                  title="收藏此语音"
+                                >
+                                  <Star className="w-3 h-3" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </section>
 
           {/* ── System Prompt ── */}
@@ -598,6 +881,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                   onClick={() => {
                     setDefaultModel(opt.value);
                     if (activeId) setModel(activeId, opt.value);
+                    playClick();
                   }}
                   className={cn(
                     'group flex items-center justify-between w-full px-4 py-3 rounded-xl border transition-all duration-200 text-left',
@@ -676,6 +960,8 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 onChange={(e) => {
                   setDefaultThinking(e.target.checked);
                   if (activeId) setThinking(activeId, e.target.checked);
+                  if (e.target.checked) playToggleOn();
+                  else playToggleOff();
                 }}
                 className="w-4 h-4 mt-0.5 rounded accent-purple-500 cursor-pointer"
               />
@@ -708,6 +994,159 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 )}
               </div>
             </label>
+          </section>
+
+          {/* ── Background Music ── */}
+          <section>
+            <h3 className={cn(
+              'text-[10px] font-semibold uppercase tracking-widest mb-3 flex items-center gap-1.5',
+              darkMode ? 'text-gray-500' : 'text-gray-400'
+            )}>
+              <Music className="w-3 h-3" /> 背景音乐
+            </h3>
+            <button
+              onClick={() => {
+                toggleMusicEnabled();
+                settings.musicEnabled ? playToggleOff() : playToggleOn();
+              }}
+              className={cn(
+                'w-full rounded-xl border p-3.5 flex items-center gap-3 text-left transition-all duration-300',
+                settings.musicEnabled
+                  ? darkMode
+                    ? 'border-emerald-500/30 bg-gradient-to-r from-emerald-500/[0.06] to-cyan-500/[0.04] shadow-[0_0_12px_rgba(0,255,136,0.06)]'
+                    : 'border-emerald-300 bg-emerald-50'
+                  : darkMode
+                    ? 'border-white/[0.06] hover:border-white/[0.12]'
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+              )}
+            >
+              <div className={cn(
+                'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0',
+                settings.musicEnabled
+                  ? darkMode ? 'bg-emerald-500/15' : 'bg-emerald-100'
+                  : darkMode ? 'bg-white/[0.04]' : 'bg-gray-100'
+              )}>
+                <Music className={cn('w-5 h-5', darkMode ? 'text-emerald-400' : 'text-emerald-600')} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className={cn('text-sm font-medium', darkMode ? 'text-white/80' : 'text-gray-700')}>
+                  {settings.musicEnabled ? '音乐已开启' : '音乐已关闭'}
+                </div>
+                <div className={cn('text-[11px] mt-0.5', darkMode ? 'text-gray-500' : 'text-gray-400')}>
+                  轻量背景音乐 · Web Audio 合成
+                </div>
+              </div>
+              {settings.musicEnabled && (
+                <div className={cn('w-2 h-2 rounded-full', darkMode ? 'bg-emerald-400 shadow-[0_0_6px_rgba(0,255,136,0.6)]' : 'bg-emerald-500')} />
+              )}
+            </button>
+
+            {/* Volume slider */}
+            {settings.musicEnabled && (
+              <div className="mt-2.5 flex items-center gap-2.5">
+                <Volume2 className={cn(
+                  'w-4 h-4 flex-shrink-0',
+                  settings.musicVolume <= 0
+                    ? darkMode ? 'text-gray-600' : 'text-gray-400'
+                    : darkMode ? 'text-emerald-400' : 'text-emerald-600'
+                )} />
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={settings.musicVolume}
+                  onChange={(e) => setMusicVolume(Number(e.target.value))}
+                  className={cn(
+                    'flex-1 h-1.5 rounded-full appearance-none cursor-pointer',
+                    '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer',
+                    darkMode
+                      ? 'bg-white/[0.08] [&::-webkit-slider-thumb]:bg-emerald-400 [&::-webkit-slider-thumb]:shadow-[0_0_6px_rgba(0,255,136,0.4)]'
+                      : 'bg-gray-200 [&::-webkit-slider-thumb]:bg-emerald-500'
+                  )}
+                />
+                <span className={cn(
+                  'text-[11px] w-8 text-right flex-shrink-0 tabular-nums',
+                  darkMode ? 'text-gray-500' : 'text-gray-400'
+                )}>
+                  {settings.musicVolume}%
+                </span>
+              </div>
+            )}
+
+            {/* Music mode selector */}
+            {settings.musicEnabled && (
+              <div className="mt-2.5">
+                <label className={cn(
+                  'text-[11px] font-medium mb-1.5 block',
+                  darkMode ? 'text-gray-500' : 'text-gray-500'
+                )}>
+                  播放模式
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {([
+                    { value: 'random', label: '随机' },
+                    { value: 'sequential', label: '顺序' },
+                    { value: '5min', label: '5分钟' },
+                    { value: '10min', label: '10分钟' },
+                  ] as { value: MusicMode; label: string }[]).map((mode) => {
+                    const isActive = settings.musicMode === mode.value;
+                    return (
+                      <button
+                        key={mode.value}
+                        onClick={() => { setMusicMode(mode.value); playClick(); }}
+                        className={cn(
+                          'px-3 py-1.5 rounded-md text-xs transition-all border',
+                          isActive
+                            ? darkMode
+                              ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                              : 'bg-emerald-100 border-emerald-300 text-emerald-700'
+                            : darkMode
+                              ? 'bg-white/[0.03] border-white/[0.08] text-gray-500 hover:border-white/[0.15]'
+                              : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'
+                        )}
+                      >
+                        {mode.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Track list with preview */}
+            {settings.musicEnabled && (
+              <div className="mt-2.5">
+                <label className={cn(
+                  'text-[11px] font-medium mb-1.5 block',
+                  darkMode ? 'text-gray-500' : 'text-gray-500'
+                )}>
+                  音乐风格
+                </label>
+                <div className="space-y-1 max-h-[160px] overflow-y-auto custom-scrollbar">
+                  {MUSIC_TRACKS.map((t) => (
+                    <div
+                      key={t.index}
+                      className={cn(
+                        'flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors',
+                        darkMode ? 'hover:bg-white/[0.04] text-gray-400' : 'hover:bg-gray-50 text-gray-600'
+                      )}
+                    >
+                      <span>{t.name} <span className="text-[10px] opacity-50">· {t.pattern === 'arpeggio' ? '琶音' : '长音'} · {t.bpm} BPM</span></span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); previewTrack(t.index); }}
+                        className={cn(
+                          'p-1 rounded transition-colors',
+                          darkMode ? 'hover:bg-white/[0.1] text-gray-500 hover:text-emerald-400' : 'hover:bg-gray-200 text-gray-400 hover:text-emerald-600'
+                        )}
+                        title="试听"
+                      >
+                        <Play className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
 
           {/* Footer info */}

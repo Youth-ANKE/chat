@@ -10,10 +10,11 @@ import { useChatStore } from '../stores/chatStore';
 import { useUsageStore } from '../stores/usageStore';
 import { createMessage, generateTitle } from '../lib/session';
 import { streamChat } from '../lib/stream';
-import { Settings, Menu, Trash2, Download, Zap, BarChart3 } from 'lucide-react';
+import { Settings, Menu, Trash2, Download, Zap, BarChart3, Headphones, Music } from 'lucide-react';
 import type { ModelName } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
 import { playClick, playToggleOn, playToggleOff, playSend, playStop, playDelete, playExport, playRegenerate } from '../lib/sound';
+import { speakChunk, flushSpeech, stopSpeech } from '../lib/speech';
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 2.5);
@@ -30,6 +31,10 @@ export function ChatLayout() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const darkMode = useSettingsStore((s) => s.settings.darkMode);
+  const speechEnabled = useSettingsStore((s) => s.settings.speechEnabled);
+  const toggleSpeechEnabled = useSettingsStore((s) => s.toggleSpeechEnabled);
+  const musicEnabled = useSettingsStore((s) => s.settings.musicEnabled);
+  const toggleMusicEnabled = useSettingsStore((s) => s.toggleMusicEnabled);
 
   const activeId = useChatStore((s) => s.activeId);
   const addMessage = useChatStore((s) => s.addMessage);
@@ -49,6 +54,11 @@ export function ChatLayout() {
 
   const activeMessages = getActiveMessages();
   const session = useChatStore((s) => s.sessions.find(sess => sess.id === s.activeId));
+
+  // Stop speech when switching sessions
+  useEffect(() => {
+    stopSpeech();
+  }, [activeId]);
 
   // Auto-generate title from first user message
   const titleGeneratedRef = useRef(false);
@@ -77,6 +87,7 @@ export function ChatLayout() {
       }
       if (ctrl && e.key === 'n') {
         e.preventDefault();
+        stopSpeech();
         newSession();
       }
       if (ctrl && e.key === 'b') {
@@ -113,6 +124,9 @@ export function ChatLayout() {
       abortRef.current = abortController;
       setIsStreaming(true);
 
+      // Stop any previous speech
+      stopSpeech();
+
       // Capture usage data for stats tracking
       let usageCaptured = false;
 
@@ -144,6 +158,9 @@ export function ChatLayout() {
           signal: abortController.signal,
           onToken: (token) => {
             appendContent(localActiveId, assistantMsgId, token);
+            if (useSettingsStore.getState().settings.speechEnabled) {
+              speakChunk(token);
+            }
           },
           onReasoning: (chunk) => {
             appendReasoning(localActiveId, assistantMsgId, chunk);
@@ -176,6 +193,9 @@ export function ChatLayout() {
           onDone: () => {
             updateMessage(localActiveId, assistantMsgId, { status: 'done' });
             setIsStreaming(false);
+            if (useSettingsStore.getState().settings.speechEnabled) {
+              flushSpeech();
+            }
           },
         }
       );
@@ -301,6 +321,7 @@ export function ChatLayout() {
 
   const handleStop = useCallback(() => {
     playStop();
+    stopSpeech();
     abortRef.current?.abort();
     if (activeId) {
       const msgs = getActiveMessages();
@@ -441,6 +462,34 @@ export function ChatLayout() {
               title="用量统计"
             >
               <BarChart3 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => {
+                toggleSpeechEnabled();
+                playClick();
+              }}
+              className={`p-1.5 rounded-lg transition-colors ${
+                speechEnabled
+                  ? darkMode ? 'text-purple-400 bg-purple-500/10 hover:bg-purple-500/15' : 'text-purple-600 bg-purple-50 hover:bg-purple-100'
+                  : darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-gray-300' : 'hover:bg-gray-100 text-gray-400'
+              }`}
+              title={speechEnabled ? '关闭朗读' : '开启朗读'}
+            >
+              <Headphones className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => {
+                toggleMusicEnabled();
+                playClick();
+              }}
+              className={`p-1.5 rounded-lg transition-colors ${
+                musicEnabled
+                  ? darkMode ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15' : 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
+                  : darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-gray-300' : 'hover:bg-gray-100 text-gray-400'
+              }`}
+              title={musicEnabled ? '关闭背景音乐' : '开启背景音乐'}
+            >
+              <Music className="w-4 h-4" />
             </button>
             <button
               onClick={() => { playClick(); setSettingsOpen(true); }}

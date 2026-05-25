@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import type { Settings } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
 import { setSoundEnabled as applySoundEnabled, playThemeToggle } from '../lib/sound';
+import { setSpeechEnabled as applySpeechEnabled, setSpeechVoice as applySpeechVoice } from '../lib/speech';
+import { setMusicEnabled as applyMusicEnabled, setMusicMode as applyMusicMode, setMusicVolume as applyMusicVolume, type MusicMode } from '../lib/music';
 
 interface SettingsState {
   settings: Settings;
@@ -9,6 +11,14 @@ interface SettingsState {
   setDarkMode: (on: boolean) => void;
   toggleSoundEnabled: () => void;
   setSoundEnabled: (on: boolean) => void;
+  toggleSpeechEnabled: () => void;
+  setSpeechEnabled: (on: boolean) => void;
+  setSpeechVoice: (voiceURI: string) => void;
+  toggleSpeechVoiceFavorite: (voiceURI: string) => void;
+  toggleMusicEnabled: () => void;
+  setMusicEnabled: (on: boolean) => void;
+  setMusicMode: (mode: MusicMode) => void;
+  setMusicVolume: (vol: number) => void;
   setDefaultModel: (model: Settings['defaultModel']) => void;
   setDefaultTemperature: (t: number) => void;
   setDefaultThinking: (on: boolean) => void;
@@ -43,6 +53,53 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setSoundEnabled: (on) => {
     set((state) => ({ settings: { ...state.settings, soundEnabled: on } }));
     applySoundEnabled(on);
+  },
+
+  toggleSpeechEnabled: () => {
+    const next = !get().settings.speechEnabled;
+    set((state) => ({ settings: { ...state.settings, speechEnabled: next } }));
+    applySpeechEnabled(next);
+  },
+
+  setSpeechEnabled: (on) => {
+    set((state) => ({ settings: { ...state.settings, speechEnabled: on } }));
+    applySpeechEnabled(on);
+  },
+
+  setSpeechVoice: (voiceURI) => {
+    set((state) => ({ settings: { ...state.settings, speechVoice: voiceURI } }));
+    applySpeechVoice(voiceURI);
+  },
+
+  toggleSpeechVoiceFavorite: (voiceURI) => {
+    set((state) => {
+      const favs = state.settings.favoriteVoices;
+      const next = favs.includes(voiceURI)
+        ? favs.filter((v) => v !== voiceURI)
+        : [...favs, voiceURI];
+      return { settings: { ...state.settings, favoriteVoices: next } };
+    });
+  },
+
+  toggleMusicEnabled: () => {
+    const next = !get().settings.musicEnabled;
+    set((state) => ({ settings: { ...state.settings, musicEnabled: next } }));
+    applyMusicEnabled(next);
+  },
+
+  setMusicEnabled: (on) => {
+    set((state) => ({ settings: { ...state.settings, musicEnabled: on } }));
+    applyMusicEnabled(on);
+  },
+
+  setMusicMode: (mode) => {
+    set((state) => ({ settings: { ...state.settings, musicMode: mode } }));
+    applyMusicMode(mode);
+  },
+
+  setMusicVolume: (vol) => {
+    set((state) => ({ settings: { ...state.settings, musicVolume: vol } }));
+    applyMusicVolume(vol);
   },
 
   setDefaultModel: (model) =>

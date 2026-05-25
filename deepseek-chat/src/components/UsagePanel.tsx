@@ -7,6 +7,7 @@ import { useUsageStore } from '../stores/usageStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { MODEL_PRICING, calculateCost } from '../types';
 import type { ModelName, UsageRecord } from '../types';
+import { playClick, playDelete } from '../lib/sound';
 
 interface UsagePanelProps {
   open: boolean;
@@ -259,7 +260,7 @@ export function UsagePanel({ open, onClose }: UsagePanelProps) {
           <div className="flex items-center gap-1">
             {records.length > 0 && (
               <button
-                onClick={() => { if (confirm('确定要清空所有用量记录？')) clearAll(); }}
+                onClick={() => { if (confirm('确定要清空所有用量记录？')) { playDelete(); clearAll(); } }}
                 className={`p-1.5 rounded-lg transition-colors ${
                   darkMode ? 'hover:bg-red-500/10 text-gray-500 hover:text-red-400' : 'hover:bg-red-50 text-gray-400 hover:text-red-500'
                 }`}
@@ -372,7 +373,7 @@ export function UsagePanel({ open, onClose }: UsagePanelProps) {
               {/* ── 最近调用记录 ── */}
               <div>
                 <button
-                  onClick={() => setShowTable(!showTable)}
+                  onClick={() => { playClick(); setShowTable(!showTable); }}
                   className="flex items-center gap-2 w-full mb-3"
                 >
                   <Clock className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} />
