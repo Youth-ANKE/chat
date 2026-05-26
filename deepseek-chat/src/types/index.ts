@@ -18,9 +18,27 @@ export interface ChatMessage {
   reasoning?: string;
   /** Files attached by the user (shown as previews, sent as multimodal content) */
   attachments?: AttachedFile[];
+  /** Auto-generated title flag (for the message that triggered title generation) */
+  titleGenerated?: boolean;
 }
 
-export type ModelName = 'deepseek-v4-flash' | 'deepseek-v4-pro';
+export type ModelName = string;
+
+export interface ChatMessage {
+  id: string;
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+  status?: 'streaming' | 'done' | 'error';
+  error?: string;
+  reasoning?: string;
+  /** Files attached by the user (shown as previews, sent as multimodal content) */
+  attachments?: AttachedFile[];
+  /** Auto-generated title flag (for the message that triggered title generation) */
+  titleGenerated?: boolean;
+  /** ID of the message being replied to */
+  replyTo?: string;
+}
 
 export interface ChatSession {
   id: string;
@@ -28,17 +46,30 @@ export interface ChatSession {
   systemPrompt?: string;
   messages: ChatMessage[];
   model: ModelName;
+  /** Provider ID this session uses (falls back to default) */
+  providerId?: string;
   thinking: boolean;
   temperature: number;
   topP: number;
   maxTokens: number;
   webSearch: boolean;
   pinned?: boolean;
+  /** 消息收藏 ID 列表 */
+  bookmarks?: string[];
+  /** 对话标签 */
+  tags?: string[];
+  /** 所属文件夹 */
+  folder?: string;
+  /** 分叉来源会话 ID */
+  parentSessionId?: string;
+  /** 分叉节点的消息索引 */
+  branchPoint?: number;
   createdAt: string;
   updatedAt: string;
 }
 
 export type AccentColor = 'cyan' | 'purple' | 'emerald' | 'amber' | 'rose' | 'blue';
+export type Language = 'zh' | 'en';
 
 export interface Settings {
   darkMode: boolean;
@@ -50,6 +81,8 @@ export interface Settings {
   musicMode: 'random' | 'sequential' | '5min' | '10min';
   musicVolume: number;
   defaultModel: ModelName;
+  /** Default provider ID */
+  defaultProviderId?: string;
   defaultTemperature: number;
   defaultThinking: boolean;
   /** 上下文消息数量上限（0=不限制） */
@@ -63,6 +96,18 @@ export interface Settings {
   fontSize: 'sm' | 'base' | 'lg';
   /** 是否显示消息时间 */
   showTimestamps: boolean;
+  /** Desktop notifications when response completes */
+  notificationsEnabled: boolean;
+  /** Auto-generate conversation titles using AI */
+  autoTitleAI: boolean;
+  /** Whether to show the context window usage bar */
+  showContextBar: boolean;
+  /** UI language */
+  language: Language;
+  /** Custom keyboard shortcuts */
+  customShortcuts?: Record<string, string>;
+  /** Whether voice input auto-sends */
+  voiceAutoSend: boolean;
 }
 
 // ── Usage / Cost Tracking ──
@@ -89,18 +134,24 @@ export interface UsageRecord {
   costRMB: number;
 }
 
-/** Pricing — conservative (cache-miss) defaults */
-export const MODEL_PRICING: Record<ModelName, { inputPerMillion: number; outputPerMillion: number; label: string }> = {
-  'deepseek-v4-flash': { inputPerMillion: 1, outputPerMillion: 2, label: 'V4 Flash' },
-  'deepseek-v4-pro':   { inputPerMillion: 3, outputPerMillion: 6, label: 'V4 Pro' },
+/** Pricing — dynamic based on provider models */
+export const DEFAULT_PRICING: Record<string, { inputPerMillion: number; outputPerMillion: number; label: string }> = {
+  'deepseek-chat':       { inputPerMillion: 1,  outputPerMillion: 2,  label: 'DeepSeek V3' },
+  'deepseek-reasoner':   { inputPerMillion: 4,  outputPerMillion: 16, label: 'DeepSeek R1' },
+  'gpt-4o':              { inputPerMillion: 15, outputPerMillion: 60, label: 'GPT-4o' },
+  'gpt-4o-mini':         { inputPerMillion: 0.6, outputPerMillion: 2.4, label: 'GPT-4o Mini' },
+  'claude-sonnet-4-20250514': { inputPerMillion: 21, outputPerMillion: 105, label: 'Claude Sonnet 4' },
+  'claude-haiku-4-20250514':  { inputPerMillion: 5.6, outputPerMillion: 28, label: 'Claude Haiku 4' },
+  'gemini-2.5-flash':    { inputPerMillion: 0.7, outputPerMillion: 2.8, label: 'Gemini Flash' },
 };
 
-/** Calculate cost in RMB from token counts */
-export function calculateCost(model: ModelName, inputTokens: number, outputTokens: number): number {
-  const price = MODEL_PRICING[model];
+/** Calculate cost in RMB from token counts (dynamic pricing lookup) */
+export function calculateCost(model: ModelName, inputTokens: number, outputTokens: number, pricingMap?: Record<string, { inputPerMillion: number; outputPerMillion: number }>): number {
+  const map = pricingMap ?? {};
+  const price = map[model] ?? DEFAULT_PRICING[model] ?? { inputPerMillion: 1, outputPerMillion: 2 };
   const inputCost = (inputTokens / 1_000_000) * price.inputPerMillion;
   const outputCost = (outputTokens / 1_000_000) * price.outputPerMillion;
-  return Math.round((inputCost + outputCost) * 10000) / 10000; // 4 decimal places
+  return Math.round((inputCost + outputCost) * 10000) / 10000;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -112,16 +163,22 @@ export const DEFAULT_SETTINGS: Settings = {
   musicEnabled: false,
   musicMode: 'sequential',
   musicVolume: 27,
-  defaultModel: 'deepseek-v4-flash',
+  defaultModel: 'deepseek-chat',
+  defaultProviderId: 'deepseek',
   defaultTemperature: 0.7,
   defaultThinking: true,
-  contextLimit: 0,     // 不限制
+  contextLimit: 0,
   topP: 1.0,
   maxTokens: 4096,
   streamOutput: true,
   accentColor: 'cyan',
   fontSize: 'base',
   showTimestamps: true,
+  notificationsEnabled: true,
+  autoTitleAI: true,
+  showContextBar: true,
+  language: 'zh',
+  voiceAutoSend: false,
 };
 
 export const ACCENT_COLORS: { value: AccentColor; label: string; class: string; glow: string }[] = [
@@ -133,7 +190,113 @@ export const ACCENT_COLORS: { value: AccentColor; label: string; class: string; 
   { value: 'blue', label: '深海蓝', class: 'bg-blue-500', glow: 'rgba(68,136,255,0.4)' },
 ];
 
-export const MODEL_OPTIONS: { value: ModelName; label: string; desc: string }[] = [
-  { value: 'deepseek-v4-flash', label: 'V4 Flash', desc: '快速、低成本' },
-  { value: 'deepseek-v4-pro', label: 'V4 Pro', desc: '高质量、深度推理' },
+export const LANGUAGE_OPTIONS: { value: Language; label: string; flag: string }[] = [
+  { value: 'zh', label: '中文', flag: '🇨🇳' },
+  { value: 'en', label: 'English', flag: '🇺🇸' },
+];
+
+// ── Knowledge Base ──
+export interface KnowledgeDocument {
+  id: string;
+  name: string;
+  type: 'pdf' | 'docx' | 'txt' | 'md';
+  chunks: KnowledgeChunk[];
+  createdAt: string;
+}
+
+export interface KnowledgeChunk {
+  id: string;
+  content: string;
+  embedding?: number[];
+}
+
+// ── Tool Calling ──
+export interface ToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  result?: string;
+  status: 'pending' | 'running' | 'done' | 'error';
+}
+
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: {
+    type: 'object';
+    properties: Record<string, {
+      type: string;
+      description: string;
+      enum?: string[];
+    }>;
+    required: string[];
+  };
+}
+
+// ── Model Provider ──
+export interface ModelProvider {
+  id: string;
+  name: string;
+  type: 'deepseek' | 'openai' | 'anthropic' | 'ollama' | 'custom';
+  apiKey: string;
+  baseUrl?: string;
+  models: ProviderModel[];
+  enabled: boolean;
+}
+
+export interface ProviderModel {
+  id: string;
+  name: string;
+  maxTokens: number;
+  supportsThinking: boolean;
+  supportsVision: boolean;
+  supportsTools: boolean;
+  pricing?: { inputPerMillion: number; outputPerMillion: number };
+}
+
+// ── Conversation Templates ──
+export interface ConversationTemplate {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  systemPrompt: string;
+  category: 'dev' | 'writing' | 'education' | 'business' | 'creative' | 'general';
+}
+
+// ── Comparison Mode ──
+export interface ComparisonSession {
+  id: string;
+  leftProviderId: string;
+  leftModel: string;
+  rightProviderId: string;
+  rightModel: string;
+  prompt: string;
+  leftContent: string;
+  rightContent: string;
+  leftReasoning?: string;
+  rightReasoning?: string;
+  leftStatus: 'idle' | 'streaming' | 'done' | 'error';
+  rightStatus: 'idle' | 'streaming' | 'done' | 'error';
+}
+
+// ── Shortcuts Configuration ──
+export interface ShortcutBinding {
+  id: string;
+  label: string;
+  defaultKeys: string;
+  currentKeys: string;
+}
+
+export const DEFAULT_SHORTCUTS: ShortcutBinding[] = [
+  { id: 'newSession', label: '新建对话', defaultKeys: 'Ctrl+N', currentKeys: 'Ctrl+N' },
+  { id: 'toggleSidebar', label: '切换侧栏', defaultKeys: 'Ctrl+B', currentKeys: 'Ctrl+B' },
+  { id: 'focusInput', label: '聚焦输入框', defaultKeys: 'Ctrl+E', currentKeys: 'Ctrl+E' },
+  { id: 'exportChat', label: '导出对话', defaultKeys: 'Ctrl+Shift+E', currentKeys: 'Ctrl+Shift+E' },
+  { id: 'clearChat', label: '清空对话', defaultKeys: 'Ctrl+K', currentKeys: 'Ctrl+K' },
+  { id: 'searchMessages', label: '搜索消息', defaultKeys: 'Ctrl+F', currentKeys: 'Ctrl+F' },
+  { id: 'globalSearch', label: '全局搜索', defaultKeys: 'Ctrl+Shift+F', currentKeys: 'Ctrl+Shift+F' },
+  { id: 'promptLibrary', label: '提示词库', defaultKeys: 'Ctrl+P', currentKeys: 'Ctrl+P' },
+  { id: 'shortcutHelp', label: '帮助面板', defaultKeys: 'Ctrl+/', currentKeys: 'Ctrl+/' },
+  { id: 'settings', label: '设置面板', defaultKeys: 'Ctrl+,', currentKeys: 'Ctrl+,' },
 ];

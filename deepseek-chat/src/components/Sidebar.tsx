@@ -8,18 +8,27 @@ import {
   Sparkles,
   Pin,
   PinOff,
+  Star,
+  Upload,
+  Tag,
+  Filter,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useChatStore } from '../stores/chatStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useBookmarkStore } from '../stores/bookmarkStore';
 import { cn } from '../lib/utils';
 import { playClick, playNewSession, playDelete, playToggleOn, playToggleOff } from '../lib/sound';
 import { stopSpeech } from '../lib/speech';
 import { useConfirm } from './ConfirmDialog';
+import { useTranslation } from 'react-i18next';
 
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  onOpenImport?: () => void;
+  onOpenBookmarks?: () => void;
+  onOpenTags?: (sessionId: string) => void;
 }
 
 function groupByDate(sessions: { id: string; title: string; updatedAt: string; pinned?: boolean }[]) {
@@ -49,8 +58,10 @@ function groupByDate(sessions: { id: string; title: string; updatedAt: string; p
   return groups;
 }
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, onOpenImport, onOpenBookmarks, onOpenTags }: SidebarProps) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState('');
+  const [showBookmarks, setShowBookmarks] = useState(false);
   const darkMode = useSettingsStore((s) => s.settings.darkMode);
   const { confirm } = useConfirm();
 
@@ -60,6 +71,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const switchSession = useChatStore((s) => s.switchSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
   const pinSession = useChatStore((s) => s.pinSession);
+
+  const bookmarks = useBookmarkStore((s) => s.bookmarks);
+  const bookmarkCount = bookmarks.length;
 
   const filtered = useMemo(() => {
     if (!search.trim()) return sessions;
@@ -106,9 +120,27 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <Plus className="w-4 h-4" />
         </button>
 
-        {/* Session count badge at bottom */}
-        <div className="mt-auto">
-          <span className={`text-[10px] font-mono tabular-nums ${
+        {/* Bottom actions */}
+        <div className="mt-auto space-y-1">
+          <button
+            onClick={onOpenBookmarks}
+            className={`p-1.5 rounded-lg transition-all ${
+              darkMode ? 'hover:bg-white/10 text-gray-500 hover:text-yellow-400' : 'hover:bg-gray-200 text-gray-400 hover:text-yellow-500'
+            }`}
+            title={t('sidebar.bookmarks')}
+          >
+            <Star className="w-4 h-4" />
+          </button>
+          <button
+            onClick={onOpenImport}
+            className={`p-1.5 rounded-lg transition-all ${
+              darkMode ? 'hover:bg-white/10 text-gray-500 hover:text-cyan-400' : 'hover:bg-gray-200 text-gray-400 hover:text-indigo-500'
+            }`}
+            title={t('common.import')}
+          >
+            <Upload className="w-4 h-4" />
+          </button>
+          <span className={`text-[10px] font-mono tabular-nums block text-center ${
             darkMode ? 'text-gray-600' : 'text-gray-400'
           }`}>{sessions.length}</span>
         </div>
@@ -167,7 +199,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           }`}
         >
           <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-200" />
-          <span>新建对话</span>
+          <span>{t('sidebar.newChat')}</span>
           <span className="ml-auto text-[10px] opacity-60">Ctrl+N</span>
         </button>
       </div>
@@ -283,13 +315,39 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       {/* Footer */}
-      <div className={`px-4 py-3 border-t flex-shrink-0 ${
+      <div className={`px-4 py-3 border-t flex-shrink-0 space-y-2 ${
         darkMode ? 'border-white/[0.04]' : 'border-gray-200/60'
       }`}>
+        {/* Quick actions */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onOpenImport}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] transition-colors ${
+              darkMode ? 'hover:bg-white/[0.05] text-gray-500 hover:text-cyan-400' : 'hover:bg-gray-200 text-gray-400 hover:text-indigo-500'
+            }`}
+            title={t('common.import')}
+          >
+            <Upload className="w-3 h-3" />
+            {t('common.import')}
+          </button>
+          <button
+            onClick={onOpenBookmarks}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] transition-colors ${
+              darkMode ? 'hover:bg-white/[0.05] text-gray-500 hover:text-yellow-400' : 'hover:bg-gray-200 text-gray-400 hover:text-yellow-500'
+            }`}
+            title={t('sidebar.bookmarks')}
+          >
+            <Star className="w-3 h-3" />
+            {t('sidebar.bookmarks')}
+            {bookmarkCount > 0 && (
+              <span className={`text-[10px] ${darkMode ? 'text-yellow-400/60' : 'text-yellow-500'}`}>({bookmarkCount})</span>
+            )}
+          </button>
+        </div>
         <div className={`flex items-center justify-between text-[11px] ${
           darkMode ? 'text-gray-500/70' : 'text-gray-400'
         }`}>
-          <span>{sessions.length} 个会话</span>
+          <span>{sessions.length} {t('sidebar.sessions')}</span>
           <kbd className="px-1.5 py-0.5 rounded bg-white/[0.04] border border-white/[0.05] font-mono text-[10px]">
             Ctrl+/
           </kbd>

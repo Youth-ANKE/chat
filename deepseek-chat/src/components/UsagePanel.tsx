@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useUsageStore } from '../stores/usageStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { MODEL_PRICING, calculateCost } from '../types';
+import { DEFAULT_PRICING, calculateCost } from '../types';
 import type { ModelName, UsageRecord } from '../types';
 import { playClick, playDelete } from '../lib/sound';
 
@@ -92,7 +92,7 @@ function DonutChart({ byModel }: { byModel: Record<string, { totalTokens: number
         {segments.map((s) => (
           <div key={s.model} className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
-            <span className="text-gray-300">{MODEL_PRICING[s.model as ModelName]?.label ?? s.model}</span>
+            <span className="text-gray-300">{DEFAULT_PRICING[s.model as ModelName]?.label ?? s.model}</span>
             <span className="text-gray-500 tabular-nums">{((s.tokens / total) * 100).toFixed(0)}%</span>
           </div>
         ))}
@@ -149,7 +149,7 @@ function TokensBarChart({ byModel }: { byModel: Record<string, { inputTokens: nu
             {/* Model name at bottom */}
             <text x={x0 + barWidth + 2} y={barHeight + 46} textAnchor="middle"
               className="fill-gray-300" fontSize="10" fontWeight="600">
-              {MODEL_PRICING[model as ModelName]?.label ?? model}
+              {DEFAULT_PRICING[model as ModelName]?.label ?? model}
             </text>
           </g>
         );
@@ -292,7 +292,7 @@ export function UsagePanel({ open, onClose }: UsagePanelProps) {
               <Card icon={<BarChart3 className="w-3.5 h-3.5" />} label="总 Token" value={fmt(summary.totalTokens)}
                 color="purple" darkMode={darkMode} />
               <Card icon={<Sparkles className="w-3.5 h-3.5" />} label="常用模型"
-                value={mostUsedModel ? MODEL_PRICING[mostUsedModel[0] as ModelName]?.label ?? mostUsedModel[0] : '-'}
+                value={mostUsedModel ? DEFAULT_PRICING[mostUsedModel[0] as ModelName]?.label ?? mostUsedModel[0] : '-'}
                 color="emerald" darkMode={darkMode} />
             </div>
           </div>
@@ -358,7 +358,7 @@ export function UsagePanel({ open, onClose }: UsagePanelProps) {
                       </tr>
                     </thead>
                     <tbody>
-                      {Object.entries(MODEL_PRICING).map(([key, p]) => (
+                      {Object.entries(DEFAULT_PRICING).map(([key, p]) => (
                         <tr key={key} className={darkMode ? 'border-t border-white/[0.04]' : 'border-t border-gray-200'}>
                           <td className={`py-2 font-medium ${darkMode ? 'text-white/80' : 'text-gray-800'}`}>{p.label}</td>
                           <td className="py-2 text-right tabular-nums text-cyan-400">¥{p.inputPerMillion}</td>
@@ -412,7 +412,7 @@ export function UsagePanel({ open, onClose }: UsagePanelProps) {
                                     ? darkMode ? 'bg-purple-500/10 text-purple-400' : 'bg-purple-50 text-purple-600'
                                     : darkMode ? 'bg-cyan-500/10 text-cyan-400' : 'bg-cyan-50 text-cyan-600'
                                 }`}>
-                                  {MODEL_PRICING[r.model]?.label ?? r.model}
+                                  {DEFAULT_PRICING[r.model]?.label ?? r.model}
                                 </span>
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums text-gray-400">{fmt(r.inputTokens)}</td>

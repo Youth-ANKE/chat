@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import type { ChatSession, ChatMessage, ModelName } from '../types';
 import { createSession } from '../lib/session';
 import { loadSessions, saveSession, deleteSession as delSession } from '../lib/storage';
+import { useSettingsStore } from './settingsStore';
+
+const DEFAULT_MODEL = 'deepseek-chat';
 
 interface ChatState {
   sessions: ChatSession[];
@@ -38,6 +41,10 @@ interface ChatState {
   getActive: () => ChatSession | undefined;
   getActiveMessages: () => ChatMessage[];
   exportConversation: (sessionId: string) => string;
+  /** Search across ALL sessions' messages for a query */
+  searchAllMessages: (query: string) => { sessionId: string; sessionTitle: string; message: ChatMessage }[];
+  /** Export conversation as JSON string */
+  exportConversationJSON: (sessionId: string) => string;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -47,7 +54,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   init: async () => {
     const sessions = await loadSessions();
     if (sessions.length === 0) {
-      const s = createSession('deepseek-v4-flash');
+      const defaultModel = useSettingsStore.getState().settings.defaultModel ?? DEFAULT_MODEL;
+      const defaultProviderId = useSettingsStore.getState().settings.defaultProviderId;
+      const s = createSession(defaultModel, defaultProviderId);
       set({ sessions: [s], activeId: s.id });
       await saveSession(s);
     } else {
@@ -56,7 +65,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   newSession: (model) => {
-    const s = createSession(model ?? 'deepseek-v4-flash');
+    const defaultModel = model ?? useSettingsStore.getState().settings.defaultModel ?? DEFAULT_MODEL;
+    const defaultProviderId = useSettingsStore.getState().settings.defaultProviderId;
+    const s = createSession(defaultModel, defaultProviderId);
     set((state) => ({
       sessions: [s, ...state.sessions],
       activeId: s.id,
@@ -77,7 +88,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ sessions: filtered, activeId: nextActive });
     delSession(id);
     if (!nextActive) {
-      const s = createSession('deepseek-v4-flash');
+      const defaultModel = useSettingsStore.getState().settings.defaultModel ?? DEFAULT_MODEL;
+      const s = createSession(defaultModel);
       set((state) => ({
         sessions: [...state.sessions, s],
         activeId: s.id,
@@ -291,5 +303,45 @@ export const useChatStore = create<ChatState>((set, get) => ({
       lines.push('');
     }
     return lines.join('\n');
+  },
+
+  exportConversationJSON: (sessionId: string) => {
+    const session = get().sessions.find((s) => s.id === sessionId);
+    if (!session) return '';
+    const exportData = {
+      title: session.title,
+      model: session.model,
+      temperature: session.temperature,
+      thinking: session.thinking,
+      exportedAt: new Date().toISOString(),
+      messages: session.messages
+        .filter((m) => m.role !== 'system')
+        .map((m) => ({
+          role: m.role,
+          content: m.content,
+          reasoning: m.reasoning,
+          createdAt: m.createdAt,
+        })),
+    };
+    return JSON.stringify(exportData, null, 2);
+  },
+
+  searchAllMessages: (query: string) => {
+    if (!query.trim()) return [];
+    const q = query.toLowerCase();
+    const results: { sessionId: string; sessionTitle: string; message: ChatMessage }[] = [];
+    const sessions = get().sessions;
+    for (const s of sessions) {
+      for (const msg of s.messages) {
+        if (msg.role === 'system') continue;
+        const inContent = msg.content.toLowerCase().includes(q);
+        const inReasoning = msg.reasoning?.toLowerCase().includes(q);
+        const inAttachments = msg.attachments?.some((a) => a.name.toLowerCase().includes(q));
+        if (inContent || inReasoning || inAttachments) {
+          results.push({ sessionId: s.id, sessionTitle: s.title, message: msg });
+        }
+      }
+    }
+    return results;
   },
 }));

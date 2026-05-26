@@ -1,8 +1,15 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, forwardRef, useImperativeHandle } from 'react';
 import type { ChatMessage } from '../types';
 import { MessageItem } from './MessageItem';
 import { Sparkles, Cpu, Zap, ChevronRight, Brain, Code2, Globe, SearchX } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
+
+export interface MessageListHandle {
+  /** The scrollable container element */
+  scrollTop: (value?: number) => number;
+  scrollToTop: () => void;
+  scrollToBottom: () => void;
+}
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -12,6 +19,13 @@ interface MessageListProps {
   onStartEdit?: (msgId: string) => void;
   onCancelEdit?: () => void;
   searchQuery?: string;
+  sessionId?: string;
+  sessionTitle?: string;
+  onPreviewCode?: (code: string, lang: string) => void;
+  onBranch?: (msgId: string) => void;
+  onReply?: (msg: ChatMessage) => void;
+  /** For timeline grouping */
+  timelineMode?: boolean;
 }
 
 const SUGGESTIONS = [
@@ -23,9 +37,27 @@ const SUGGESTIONS = [
   { icon: '💎', label: '架构设计', prompt: '为百万级用户的 SaaS 产品设计技术架构方案' },
 ];
 
-export function MessageList({ messages, onSend, editingMsgId, onEdit, onStartEdit, onCancelEdit, searchQuery }: MessageListProps) {
+export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
+function MessageList({ messages, onSend, editingMsgId, onEdit, onStartEdit, onCancelEdit, searchQuery, sessionId, sessionTitle, onPreviewCode, onBranch, onReply, timelineMode }, ref) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const darkMode = useSettingsStore((s) => s.settings.darkMode);
+
+  // Expose scroll control methods to parent
+  useImperativeHandle(ref, () => ({
+    scrollTop(value?: number): number {
+      const el = scrollContainerRef.current;
+      if (!el) return 0;
+      if (value !== undefined) { el.scrollTop = value; return value; }
+      return el.scrollTop;
+    },
+    scrollToTop() {
+      scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    scrollToBottom() {
+      scrollContainerRef.current?.scrollTo({ top: scrollContainerRef.current.scrollHeight, behavior: 'smooth' });
+    },
+  }), []);
 
   // Filter messages based on search query
   const filteredMessages = useMemo(() => {
@@ -45,7 +77,7 @@ export function MessageList({ messages, onSend, editingMsgId, onEdit, onStartEdi
 
   if (messages.length === 0) {
     return (
-      <div className={`flex-1 flex items-center justify-center overflow-y-auto ${
+      <div ref={scrollContainerRef} className={`flex-1 flex items-center justify-center overflow-y-auto custom-scrollbar ${
         darkMode ? 'tech-grid relative' : 'bg-gray-50/50'
       }`}>
         {/* Radial glow background for dark mode */}
@@ -190,13 +222,50 @@ export function MessageList({ messages, onSend, editingMsgId, onEdit, onStartEdi
   }
 
   return (
-    <div className="flex-1 overflow-y-auto custom-scrollbar">
+    <div ref={scrollContainerRef} className="flex-1 overflow-y-auto custom-scrollbar">
       {filteredMessages.length === 0 && searchQuery?.trim() ? (
         <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-500">
           <SearchX className="w-10 h-10 opacity-20" />
           <span className="text-sm">未找到匹配的消息</span>
           <span className="text-xs text-gray-600">尝试其他关键词</span>
         </div>
+      ) : timelineMode ? (
+        (() => {
+          const groups: { date: string; msgs: ChatMessage[] }[] = [];
+          for (const msg of filteredMessages) {
+            const dateStr = new Date(msg.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', weekday: 'short' });
+            const last = groups[groups.length - 1];
+            if (last?.date === dateStr) { last.msgs.push(msg); }
+            else { groups.push({ date: dateStr, msgs: [msg] }); }
+          }
+          return groups.map((group, gi) => (
+            <div key={gi}>
+              <div className={`flex items-center gap-2 px-4 py-2 sticky top-0 z-10 backdrop-blur ${darkMode ? 'bg-black/80' : 'bg-white/80'}`}>
+                <div className="w-1.5 h-1.5 rounded-full bg-cyan-400/50" />
+                <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider">{group.date}</span>
+                <span className="text-[9px] text-gray-700">{group.msgs.length} 条</span>
+              </div>
+              {group.msgs.map((msg, i) => (
+                <div key={msg.id} className="animate-message-in" style={{ animationDelay: `${Math.min(i * 10, 150)}ms` }}>
+                  <MessageItem
+                    message={msg}
+                    allMessages={messages}
+                    isEditing={editingMsgId === msg.id}
+                    onEdit={onEdit}
+                    onStartEdit={msg.role === 'user' ? onStartEdit : undefined}
+                    onCancelEdit={onCancelEdit}
+                    onReply={onReply}
+                    searchHighlight={searchQuery?.trim()}
+                    sessionId={sessionId}
+                    sessionTitle={sessionTitle}
+                    onPreviewCode={onPreviewCode}
+                    onBranch={msg.role === 'user' ? onBranch : undefined}
+                  />
+                </div>
+              ))}
+            </div>
+          ));
+        })()
       ) : (
         filteredMessages.map((msg, i) => (
           <div
@@ -206,11 +275,17 @@ export function MessageList({ messages, onSend, editingMsgId, onEdit, onStartEdi
           >
             <MessageItem
               message={msg}
+              allMessages={messages}
               isEditing={editingMsgId === msg.id}
               onEdit={onEdit}
               onStartEdit={msg.role === 'user' ? onStartEdit : undefined}
               onCancelEdit={onCancelEdit}
+              onReply={onReply}
               searchHighlight={searchQuery?.trim()}
+              sessionId={sessionId}
+              sessionTitle={sessionTitle}
+              onPreviewCode={onPreviewCode}
+              onBranch={msg.role === 'user' ? onBranch : undefined}
             />
           </div>
         ))
@@ -219,3 +294,4 @@ export function MessageList({ messages, onSend, editingMsgId, onEdit, onStartEdi
     </div>
   );
 }
+);

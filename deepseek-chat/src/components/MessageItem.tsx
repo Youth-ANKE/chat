@@ -1,17 +1,27 @@
-import { Bot, User, AlertCircle, Copy, Check, Pencil, Brain, ChevronDown, ChevronUp, Image, FileText } from 'lucide-react';
+import { Bot, User, AlertCircle, Copy, Check, Pencil, Brain, ChevronDown, ChevronUp, Image, FileText, Star, Code2, GitBranch, ThumbsUp, ThumbsDown, Reply, CornerDownRight } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import type { ChatMessage } from '../types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useBookmarkStore } from '../stores/bookmarkStore';
+import { useRatingStore } from '../stores/ratingStore';
 import { playClick, playSave } from '../lib/sound';
 
 interface MessageItemProps {
   message: ChatMessage;
+  /** All messages in the conversation (for resolving replyTo references) */
+  allMessages?: ChatMessage[];
   isEditing?: boolean;
   onEdit?: (msgId: string, newContent: string) => void;
   onStartEdit?: (msgId: string) => void;
   onCancelEdit?: () => void;
+  /** Called when user clicks "引用回复" on a message */
+  onReply?: (msg: ChatMessage) => void;
   searchHighlight?: string;
+  sessionId?: string;
+  sessionTitle?: string;
+  onPreviewCode?: (code: string, lang: string) => void;
+  onBranch?: (msgId: string) => void;
 }
 
 function ThinkingDots() {
@@ -96,12 +106,20 @@ function ThinkingBlock({ reasoning, isStreaming }: { reasoning: string; isStream
   );
 }
 
-export function MessageItem({ message, isEditing, onEdit, onStartEdit, onCancelEdit, searchHighlight }: MessageItemProps) {
+export function MessageItem({ message, allMessages, isEditing, onEdit, onStartEdit, onCancelEdit, onReply, searchHighlight, sessionId, sessionTitle, onPreviewCode, onBranch }: MessageItemProps) {
+  // Resolve the replied-to message
+  const repliedTo = message.replyTo && allMessages
+    ? allMessages.find((m) => m.id === message.replyTo)
+    : undefined;
   const [copied, setCopied] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const editRef = useRef<HTMLTextAreaElement>(null);
   const darkMode = useSettingsStore((s) => s.settings.darkMode);
   const showTimestamps = useSettingsStore((s) => s.settings.showTimestamps);
+  const { isBookmarked, addBookmark } = useBookmarkStore();
+  const bookmarked = isBookmarked(message.id);
+  const { rateMessage, getRating } = useRatingStore();
+  const rating = getRating(message.id);
 
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
@@ -109,6 +127,12 @@ export function MessageItem({ message, isEditing, onEdit, onStartEdit, onCancelE
   const hasError = message.status === 'error';
   const hasContent = !!message.content;
   const hasReasoning = !!(message.reasoning && message.reasoning.length > 0);
+
+  // Detect code blocks for artifact preview
+  const codeBlockMatch = !isUser ? message.content.match(/```(\w+)?\s*\n([\s\S]*?)```/) : null;
+  const hasCodeBlock = !!codeBlockMatch;
+  const codeLang = codeBlockMatch?.[1] || 'html';
+  const codeContent = codeBlockMatch?.[2] || '';
 
   useEffect(() => {
     if (isEditing && editRef.current) {
@@ -219,6 +243,16 @@ export function MessageItem({ message, isEditing, onEdit, onStartEdit, onCancelE
           )}
         </div>
 
+        {/* Reply-to indicator */}
+        {repliedTo && (
+          <div className={`mb-2 flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] ${
+            darkMode ? 'bg-purple-500/[0.06] border border-purple-500/10 text-purple-400/60' : 'bg-purple-50 border border-purple-200 text-purple-500'
+          }`}>
+            <CornerDownRight className="w-3 h-3" />
+            <span className="truncate max-w-[200px]">回复: {repliedTo.content.slice(0, 50)}{repliedTo.content.length > 50 ? '...' : ''}</span>
+          </div>
+        )}
+
         {/* Body */}
         {isEditing ? (
           <div className="space-y-2">
@@ -290,7 +324,7 @@ export function MessageItem({ message, isEditing, onEdit, onStartEdit, onCancelE
 
         {/* Action buttons */}
         {!isStreaming && hasContent && !isEditing && (
-          <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+          <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex-wrap">
             {isUser && onStartEdit && (
               <button onClick={() => { playClick(); setEditContent(message.content); onStartEdit(message.id); }} className={actionBtnClass} title="编辑消息">
                 <Pencil className="w-3 h-3" />编辑
@@ -299,6 +333,77 @@ export function MessageItem({ message, isEditing, onEdit, onStartEdit, onCancelE
             <button onClick={handleCopy} className={copyBtnClass} title="复制消息">
               {copied ? <><Check className="w-3 h-3" /><span>已复制</span></> : <><Copy className="w-3 h-3" /><span>复制</span></>}
             </button>
+            {!isUser && !hasError && (
+              <>
+                <button
+                  onClick={() => { playClick(); rateMessage(message.id, sessionId ?? '', 'up'); }}
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors ${
+                    rating?.rating === 'up'
+                      ? darkMode ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-400/5' : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
+                      : darkMode ? 'text-white/40 hover:text-emerald-400 hover:bg-white/[0.04]' : 'text-gray-400 hover:text-emerald-600 hover:bg-gray-100'
+                  }`}
+                  title="好评"
+                >
+                  <ThumbsUp className={`w-3 h-3 ${rating?.rating === 'up' ? 'fill-emerald-400' : ''}`} />
+                </button>
+                <button
+                  onClick={() => { playClick(); rateMessage(message.id, sessionId ?? '', 'down'); }}
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors ${
+                    rating?.rating === 'down'
+                      ? darkMode ? 'text-red-400 hover:text-red-300 hover:bg-red-400/5' : 'text-red-600 hover:text-red-700 hover:bg-red-50'
+                      : darkMode ? 'text-white/40 hover:text-red-400 hover:bg-white/[0.04]' : 'text-gray-400 hover:text-red-600 hover:bg-gray-100'
+                  }`}
+                  title="差评"
+                >
+                  <ThumbsDown className={`w-3 h-3 ${rating?.rating === 'down' ? 'fill-red-400' : ''}`} />
+                </button>
+              </>
+            )}
+            {sessionId && sessionTitle && (
+              <button
+                onClick={() => { playClick(); addBookmark(message, sessionId, sessionTitle); }}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors ${
+                  bookmarked
+                    ? darkMode ? 'text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/5' : 'text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50'
+                    : darkMode ? 'text-white/40 hover:text-yellow-400 hover:bg-white/[0.04]' : 'text-gray-400 hover:text-yellow-600 hover:bg-gray-100'
+                }`}
+                title={bookmarked ? '取消收藏' : '收藏'}
+              >
+                <Star className={`w-3 h-3 ${bookmarked ? 'fill-yellow-400' : ''}`} />
+                {bookmarked ? '已收藏' : '收藏'}
+              </button>
+            )}
+            {!isUser && hasCodeBlock && onPreviewCode && (
+              <button
+                onClick={() => { playClick(); onPreviewCode(codeContent, codeLang); }}
+                className={actionBtnClass}
+                title="预览代码"
+              >
+                <Code2 className="w-3 h-3" />预览
+              </button>
+            )}
+            {onReply && (
+              <button
+                onClick={() => { playClick(); onReply(message); }}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors ${
+                  darkMode ? 'text-white/40 hover:text-purple-400 hover:bg-white/[0.04]' : 'text-gray-400 hover:text-purple-600 hover:bg-gray-100'
+                }`}
+                title="引用回复"
+              >
+                <Reply className="w-3 h-3" />引用
+              </button>
+            )}
+            {isUser && onBranch && (
+              <button
+                onClick={() => { playClick(); onBranch(message.id); }}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors ${
+                  darkMode ? 'text-white/40 hover:text-emerald-400 hover:bg-white/[0.04]' : 'text-gray-400 hover:text-emerald-600 hover:bg-gray-100'
+                }`}
+                title="分叉对话"
+              >
+                <GitBranch className="w-3 h-3" />分叉
+              </button>
+            )}
           </div>
         )}
       </div>

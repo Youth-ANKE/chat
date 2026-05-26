@@ -162,6 +162,10 @@ export async function streamChat(
     topP?: number;
     /** When false, buffer the entire response and deliver it all at once (no typewriter effect) */
     streamOutput?: boolean;
+    /** Custom API base URL (for multi-provider support) */
+    apiBase?: string;
+    /** Custom API key */
+    apiKey?: string;
   },
   callbacks: StreamCallbacks
 ): Promise<AbortController> {
@@ -256,9 +260,15 @@ export async function streamChat(
     if (controller.signal.aborted) break;
 
     try {
-      const response = await fetch('/api/chat', {
+      const apiEndpoint = params.apiBase ?? '/api/chat';
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (params.apiKey) {
+        headers['Authorization'] = `Bearer ${params.apiKey}`;
+      }
+
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(body),
         signal: controller.signal,
       });

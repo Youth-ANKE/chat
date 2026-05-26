@@ -49,11 +49,20 @@ install_node_nvm() {
   info "通过 nvm 安装 Node.js LTS..."
   export NVM_DIR="${HOME}/.nvm"
   if [ ! -d "$NVM_DIR" ]; then
+    info "下载并安装 nvm..."
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
   fi
+  # nvm.sh 与 set -u 不兼容，需临时关闭严格模式
+  set +u
   [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
   nvm install --lts
-  nvm use --lts
+  # nvm use --lts 在某些版本中存在 PROVIDED_VERSION 未绑定变量 bug，
+  # 先尝试 --lts，失败则回退到 default alias 方式
+  nvm use --lts 2>/dev/null || {
+    nvm alias default lts/* 2>/dev/null
+    nvm use default 2>/dev/null || true
+  }
+  set -u
 }
 
 install_node_apt() {
@@ -117,11 +126,11 @@ fi
 # ── Step 3: 依赖安装 ───────────────────────────────────
 step "检查项目依赖..."
 
-if [ -d "node_modules" ] && [ -f "node_modules/.package-lock.json" ]; then
+if [ -d "node_modules" ] && [ -d "node_modules/vite" ]; then
   ok "node_modules 已存在"
 else
-  if [ -f "package-lock.json" ] || [ -d "node_modules" ]; then
-    info "检测到已有 lock 文件，执行 npm ci..."
+  if [ -f "package-lock.json" ]; then
+    info "检测到 package-lock.json，执行 npm ci..."
     npm ci --prefer-offline --no-audit --no-fund
   else
     info "执行 npm install..."
@@ -135,7 +144,13 @@ step "配置环境变量..."
 
 load_env() {
   if [ -f "$ROOT/.env.local" ]; then
-    set -a; source "$ROOT/.env.local"; set +a
+    # 临时关闭 set -a/-u 以避免 .env.local 中潜在的未绑定变量导致崩溃
+    set +u
+    set -a
+    # shellcheck disable=SC1090
+    source "$ROOT/.env.local" 2>/dev/null || true
+    set +a
+    set -u
   fi
 }
 load_env

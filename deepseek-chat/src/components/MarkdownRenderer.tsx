@@ -6,8 +6,68 @@ import rehypeKatex from 'rehype-katex';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Copy, Check, Terminal } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { playClick } from '../lib/sound';
+
+/** Mermaid diagram renderer - loads mermaid dynamically */
+function MermaidBlock({ code }: { code: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [svg, setSvg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function render() {
+      try {
+        // Dynamically load mermaid
+        if (!(window as unknown as Record<string, unknown>).mermaid) {
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.4.1/mermaid.min.js';
+          if (!document.querySelector(`script[src="${script.src}"]`)) {
+            await new Promise<void>((resolve, reject) => {
+              script.onload = () => resolve();
+              script.onerror = () => reject(new Error('mermaid load failed'));
+              document.head.appendChild(script);
+            });
+          }
+        }
+
+        const mermaid = (window as unknown as Record<string, { render: (id: string, code: string) => Promise<{ svg: string }> }>).mermaid;
+        if (!mermaid) return;
+        const id = `mermaid-${Math.random().toString(36).slice(2, 8)}`;
+        const result = await mermaid.render(id, code);
+        if (!cancelled) setSvg(result.svg);
+      } catch (e: unknown) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Mermaid render failed');
+      }
+    }
+    render();
+    return () => { cancelled = true; };
+  }, [code]);
+
+  if (error) {
+    return (
+      <div className="my-3 p-3 rounded-lg bg-red-500/[0.06] border border-red-500/10 text-xs text-red-400 font-mono">
+        Mermaid error: {error}
+      </div>
+    );
+  }
+
+  if (svg) {
+    return (
+      <div
+        className="my-3 p-4 rounded-lg bg-[#0a0a18] border border-white/[0.04] overflow-x-auto"
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+    );
+  }
+
+  return (
+    <div className="my-3 p-4 rounded-lg border border-cyan-500/10 bg-cyan-500/[0.02] text-xs text-gray-500 animate-pulse">
+      正在渲染图表...
+    </div>
+  );
+}
 
 interface MarkdownRendererProps {
   content: string;
@@ -115,6 +175,16 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
         rehypePlugins={[rehypeKatex]}
         components={{
           code: CodeBlock as Components['code'],
+          pre: ((props: Record<string, unknown>) => {
+            const children = props.children as ReactNode;
+            // Detect mermaid code blocks
+            const codeEl = (children as unknown as { props?: { className?: string; children?: string } })?.props;
+            const lang = /language-(\w+)/.exec(codeEl?.className ?? '')?.[1];
+            if (lang === 'mermaid' && codeEl?.children) {
+              return <MermaidBlock code={codeEl.children} />;
+            }
+            return <pre {...(props as Record<string, unknown>)}>{children}</pre>;
+          }) as Components['pre'],
         }}
       >
         {content}

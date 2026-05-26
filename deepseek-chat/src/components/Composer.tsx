@@ -1,8 +1,14 @@
-import { useState, useRef, useEffect, forwardRef, useImperativeHandle, type KeyboardEvent } from 'react';
-import { Send, Square, Paperclip, Globe, X, Image, FileText, BookOpen } from 'lucide-react';
-import type { ModelName } from '../types';
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback, type KeyboardEvent, type DragEvent, type ClipboardEvent } from 'react';
+import { Send, Square, Paperclip, Globe, X, Image, FileText, BookOpen, UploadCloud, Reply, ScanEye, FileSearch } from 'lucide-react';
+import type { ModelName, ChatMessage } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useProviderStore } from '../stores/providerStore';
+import { getModelById } from '../lib/provider-adapter';
 import { playClick, playDelete } from '../lib/sound';
+import { VoiceInputButton } from './VoiceInputButton';
+import { parseDocument, isParseableDocument } from '../lib/document-parser';
+import { extractTextFromImage } from '../lib/ocr';
+import { useTranslation } from 'react-i18next';
 
 export interface ComposerHandle {
   /** Insert text at cursor position (or append), updating React state */
@@ -23,6 +29,8 @@ interface ComposerProps {
   webSearch?: boolean;
   onToggleWebSearch?: () => void;
   onOpenPromptLibrary?: () => void;
+  /** Quoted reply message (when replying to a message) */
+  replyTo?: { message: ChatMessage; onClear: () => void };
 }
 
 interface PendingFile {
@@ -34,10 +42,11 @@ interface PendingFile {
   size: number;
 }
 
-const MODEL_LABELS: Record<ModelName, string> = {
-  'deepseek-v4-flash': 'V4 Flash',
-  'deepseek-v4-pro': 'V4 Pro',
-};
+function getModelLabel(modelId: string): string {
+  const providers = useProviderStore.getState().providers;
+  const info = getModelById(modelId, providers);
+  return info?.model.name ?? modelId;
+}
 
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 const TEXT_TYPES = [
@@ -59,12 +68,16 @@ function formatSize(bytes: number): string {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(
-  function Composer({ onSend, onStop, isStreaming, disabled, model, webSearch, onToggleWebSearch, onOpenPromptLibrary }, ref) {
+  function Composer({ onSend, onStop, isStreaming, disabled, model, webSearch, onToggleWebSearch, onOpenPromptLibrary, replyTo }, ref) {
+    const { t } = useTranslation();
     const [input, setInput] = useState('');
     const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+    const [ocrPending, setOcrPending] = useState(false);
+    const [docParsing, setDocParsing] = useState(false);
     const innerRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const darkMode = useSettingsStore((s) => s.settings.darkMode);
+    const voiceAutoSend = useSettingsStore((s) => s.settings.voiceAutoSend);
     const charCount = input.length;
     const tokenEstimate = estimateTokens(input);
 
@@ -103,51 +116,94 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // Focus on mount
     useEffect(() => { innerRef.current?.focus(); }, []);
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files ?? []);
-      if (files.length === 0) return;
-
-      for (const file of files) {
-        const reader = new FileReader();
-
-        if (IMAGE_TYPES.includes(file.type)) {
-          reader.onload = () => {
-            if (typeof reader.result === 'string') {
-              setPendingFiles((prev) => [
-                ...prev,
-                {
-                  id: `f-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                  name: file.name,
-                  type: 'image',
-                  mimeType: file.type,
-                  data: reader.result as string,
-                  size: file.size,
-                },
-              ]);
-            }
-          };
-          reader.readAsDataURL(file);
-        } else {
-          reader.onload = () => {
-            if (typeof reader.result === 'string') {
-              setPendingFiles((prev) => [
-                ...prev,
-                {
-                  id: `f-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                  name: file.name,
-                  type: 'text',
-                  mimeType: file.type,
-                  data: reader.result as string,
-                  size: file.size,
-                },
-              ]);
-            }
-          };
-          reader.readAsText(file);
-        }
+    const processFile = async (file: File) => {
+      // Try document parsing for office formats
+      if (isParseableDocument(file)) {
+        setDocParsing(true);
+        try {
+          const result = await parseDocument(file);
+          if (result?.text) {
+            setPendingFiles((prev) => [
+              ...prev,
+              {
+                id: `f-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                name: file.name,
+                type: 'text',
+                mimeType: 'text/plain',
+                data: result.text,
+                size: result.text.length,
+              },
+            ]);
+          }
+        } catch { /* fallback */ }
+        setDocParsing(false);
+        return;
       }
 
-      // Reset input so the same file can be selected again
+      const reader = new FileReader();
+      if (IMAGE_TYPES.includes(file.type)) {
+        reader.onload = async () => {
+          if (typeof reader.result === 'string') {
+            const dataUri = reader.result as string;
+            setPendingFiles((prev) => [
+              ...prev,
+              {
+                id: `f-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                name: file.name,
+                type: 'image',
+                mimeType: file.type,
+                data: dataUri,
+                size: file.size,
+              },
+            ]);
+            // Try OCR on the image
+            setOcrPending(true);
+            try {
+              const result = await extractTextFromImage(dataUri, model ?? 'deepseek-chat');
+              if (result.hasText) {
+                setPendingFiles((prev) => [
+                  ...prev,
+                  {
+                    id: `ocr-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                    name: `OCR: ${file.name}`,
+                    type: 'text',
+                    mimeType: 'text/plain',
+                    data: `[图片文字识别: ${file.name}]\n${result.text}`,
+                    size: result.text.length,
+                  },
+                ]);
+              }
+            } catch { /* OCR failed, silent */ }
+            setOcrPending(false);
+          }
+        };
+        reader.readAsDataURL(file);
+      } else {
+        reader.onload = () => {
+          if (typeof reader.result === 'string') {
+            setPendingFiles((prev) => [
+              ...prev,
+              {
+                id: `f-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                name: file.name,
+                type: 'text',
+                mimeType: file.type,
+                data: reader.result as string,
+                size: file.size,
+              },
+            ]);
+          }
+        };
+        reader.readAsText(file);
+      }
+    };
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files ?? []);
+      if (files.length === 0) return;
+      for (const file of files) {
+        await processFile(file);
+      }
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
@@ -182,11 +238,143 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
 
     const totalSize = pendingFiles.reduce((s, f) => s + f.size, 0);
 
+    // ── Drag & Drop ──
+    const [dragOver, setDragOver] = useState(false);
+    const dragCounter = useRef(0);
+
+    const handleDragEnter = useCallback((e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current += 1;
+      if (e.dataTransfer.items?.length > 0) setDragOver(true);
+    }, []);
+
+    const handleDragLeave = useCallback((e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current -= 1;
+      if (dragCounter.current <= 0) {
+        dragCounter.current = 0;
+        setDragOver(false);
+      }
+    }, []);
+
+    const processDroppedFiles = useCallback(
+      async (files: FileList) => {
+        for (const file of Array.from(files)) {
+          await processFile(file);
+        }
+      },
+      [model]
+    );
+
+    const handleDrop = useCallback(
+      (e: DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragOver(false);
+        dragCounter.current = 0;
+        if (e.dataTransfer.files?.length) {
+          processDroppedFiles(e.dataTransfer.files);
+        }
+      },
+      [processDroppedFiles]
+    );
+
+    // ── Clipboard paste (for images) ──
+    const handlePaste = useCallback((e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items || isStreaming || disabled) return;
+
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (!file) continue;
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (typeof reader.result === 'string') {
+              setPendingFiles((prev) => [
+                ...prev,
+                {
+                  id: `f-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                  name: `粘贴图片-${new Date().toLocaleTimeString('zh-CN').replace(/:/g, '')}.png`,
+                  type: 'image',
+                  mimeType: item.type,
+                  data: reader.result as string,
+                  size: file.size,
+                },
+              ]);
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+    }, [isStreaming, disabled]);
+
     return (
-      <div className={`border-t px-4 py-3 z-10 flex-shrink-0 ${
-        darkMode ? 'glass border-white/5' : 'bg-white/80 border-gray-200/80 backdrop-blur-md'
-      }`}>
+      <div
+        className={`border-t px-4 py-3 z-10 flex-shrink-0 relative transition-colors ${
+          dragOver
+            ? darkMode
+              ? 'glass border-cyan-500/40 !bg-cyan-500/[0.06]'
+              : 'bg-indigo-50/80 border-indigo-400/60 backdrop-blur-md'
+            : darkMode ? 'glass border-white/5' : 'bg-white/80 border-gray-200/80 backdrop-blur-md'
+        }`}
+        onPaste={handlePaste}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleDrop}
+      >
+        {/* Drag overlay */}
+        {dragOver && (
+          <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+            <div className={`flex flex-col items-center gap-2 px-6 py-4 rounded-2xl ${
+              darkMode
+                ? 'bg-cyan-500/10 border-2 border-dashed border-cyan-500/40'
+                : 'bg-indigo-50 border-2 border-dashed border-indigo-300'
+            }`}>
+              <UploadCloud className={`w-8 h-8 ${darkMode ? 'text-cyan-400' : 'text-indigo-500'}`} />
+              <span className={`text-sm font-medium ${darkMode ? 'text-cyan-300' : 'text-indigo-600'}`}>
+                释放文件以添加附件
+              </span>
+              <span className={`text-[11px] ${darkMode ? 'text-cyan-400/50' : 'text-indigo-400'}`}>
+                支持图片和文本文件
+              </span>
+            </div>
+          </div>
+        )}
         <div className="max-w-3xl mx-auto">
+          {/* Reply indicator */}
+          {replyTo && (
+            <div className={`mb-2 flex items-start gap-2 p-2 rounded-lg ${
+              darkMode ? 'bg-purple-500/[0.06] border border-purple-500/15' : 'bg-purple-50 border border-purple-200'
+            }`}>
+              <Reply className="w-3.5 h-3.5 text-purple-400 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="text-[10px] text-purple-400/70 font-semibold block">回复消息</span>
+                <span className="text-[11px] text-gray-400 line-clamp-1">{replyTo.message.content.slice(0, 100)}</span>
+              </div>
+              <button
+                onClick={replyTo.onClear}
+                className="p-0.5 rounded hover:bg-white/10 text-gray-500 hover:text-gray-300"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
+          {/* OCR / Doc parsing indicator */}
+          {(ocrPending || docParsing) && (
+            <div className={`mb-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] ${
+              darkMode ? 'bg-amber-500/10 text-amber-400/80 border border-amber-500/15' : 'bg-amber-50 text-amber-600 border border-amber-200'
+            }`}>
+              {ocrPending ? <ScanEye className="w-3 h-3 animate-pulse" /> : <FileSearch className="w-3 h-3 animate-pulse" />}
+              {ocrPending ? '正在识别图片文字...' : '正在解析文档...'}
+            </div>
+          )}
+
           {/* Pending file previews */}
           {pendingFiles.length > 0 && (
             <div className="flex items-center gap-2 mb-2.5 flex-wrap">
@@ -278,6 +466,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
 
             {/* Action buttons */}
             <div className="flex items-center gap-1 flex-shrink-0">
+              {/* Voice input */}
+              <VoiceInputButton
+                onText={(text) => {
+                  const newText = input + text;
+                  setInput(newText);
+                  if (voiceAutoSend && newText.trim()) {
+                    setTimeout(() => handleSend(), 300);
+                  }
+                }}
+                disabled={disabled || isStreaming}
+              />
+
               {/* Prompt library */}
               <button
                 onClick={() => { playClick(); onOpenPromptLibrary?.(); }}
@@ -287,7 +487,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     ? 'text-white/35 hover:text-purple-400 hover:bg-white/[0.06]'
                     : 'text-gray-400 hover:text-indigo-600 hover:bg-gray-200/60'
                 }`}
-                title="提示词库 (Ctrl+P)"
+                title={t('shortcuts.promptLibrary') + ' (Ctrl+P)'}
               >
                 <BookOpen className="w-4 h-4" />
               </button>
@@ -374,7 +574,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                       ? 'bg-emerald-400 shadow-[0_0_6px_rgba(0,255,136,0.5)] animate-pulse'
                       : 'bg-emerald-500'
                   }`} />
-                  {MODEL_LABELS[model] ?? model}
+                  {getModelLabel(model)}
                 </span>
               )}
               {webSearch && (

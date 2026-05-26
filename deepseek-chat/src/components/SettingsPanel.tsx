@@ -1,14 +1,18 @@
-import { X, Sun, Moon, Zap, Brain, Cpu, Sparkles, Sliders, Volume2, VolumeX, Headphones, Play, Music, Star, Palette, Type, Clock, Download, Upload, RotateCcw } from 'lucide-react';
+import { X, Sun, Moon, Zap, Brain, Cpu, Sparkles, Sliders, Volume2, VolumeX, Headphones, Play, Music, Star, Palette, Type, Clock, Download, Upload, RotateCcw, Globe, Bell, BellOff, Bot, Gauge, Mic, Server } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useChatStore } from '../stores/chatStore';
-import { MODEL_OPTIONS, ACCENT_COLORS } from '../types';
+import { ACCENT_COLORS } from '../types';
+import { getAllModels } from '../lib/provider-adapter';
 import { cn } from '../lib/utils';
 import { playClick, playToggleOn, playToggleOff, playSave } from '../lib/sound';
 import { getAvailableVoices, previewVoice, AZURE_VOICES, type SpeechVoice } from '../lib/speech';
 import { previewTrack, MUSIC_TRACKS, type MusicMode } from '../lib/music';
+import { useProviderStore } from '../stores/providerStore';
+import { ProviderManager } from './ProviderManager';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmDialog';
+import { useTranslation } from 'react-i18next';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -18,6 +22,7 @@ interface SettingsPanelProps {
 const TOKEN_OPTIONS = [1024, 2048, 4096, 8192, 16384];
 
 export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
+  const { t, i18n } = useTranslation();
   const {
     settings,
     toggleDarkMode,
@@ -38,6 +43,12 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
     setAccentColor,
     setFontSize,
     setShowTimestamps,
+    setNotificationsEnabled,
+    setAutoTitleAI,
+    setShowContextBar,
+    setLanguage,
+    setDefaultProviderId,
+    setVoiceAutoSend,
     exportSettings,
     importSettings,
     resetSettings,
@@ -886,7 +897,13 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
               <Zap className="w-3 h-3" /> 模型选择
             </h3>
             <div className="space-y-2.5">
-              {MODEL_OPTIONS.map((opt) => (
+              {(() => {
+                const providers = useProviderStore.getState().providers;
+                const allModels = getAllModels(providers);
+                return allModels.map((item) => {
+                  const opt = { value: item.model.id, label: item.model.name, desc: `${item.providerName}` };
+                  const isSelected = (session?.model ?? settings.defaultModel) === opt.value;
+                  return (
                 <button
                   key={opt.value}
                   onClick={() => {
@@ -896,7 +913,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                   }}
                   className={cn(
                     'group flex items-center justify-between w-full px-4 py-3 rounded-xl border transition-all duration-200 text-left',
-                    (session?.model ?? settings.defaultModel) === opt.value
+                    isSelected
                       ? darkMode
                         ? 'border-cyan-500/30 bg-gradient-to-r from-cyan-500/[0.06] to-purple-500/[0.03] shadow-[0_0_12px_rgba(0,229,255,0.06)]'
                         : 'border-indigo-300 bg-indigo-50'
@@ -908,25 +925,21 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                   <div className="flex items-center gap-3">
                     <div className={cn(
                       'w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
-                      (session?.model ?? settings.defaultModel) === opt.value
-                        ? opt.value === 'deepseek-v4-pro'
-                          ? darkMode ? 'bg-purple-500/15' : 'bg-purple-100'
-                          : darkMode ? 'bg-cyan-500/15' : 'bg-cyan-100'
+                      isSelected
+                        ? darkMode ? 'bg-cyan-500/15' : 'bg-cyan-100'
                         : darkMode ? 'bg-white/[0.04]' : 'bg-gray-100'
                     )}>
                       <Zap className={cn(
                         'w-4 h-4',
-                        (session?.model ?? settings.defaultModel) === opt.value
-                          ? opt.value === 'deepseek-v4-pro'
-                            ? darkMode ? 'text-purple-400' : 'text-purple-600'
-                            : darkMode ? 'text-cyan-400' : 'text-cyan-600'
+                        isSelected
+                          ? darkMode ? 'text-cyan-400' : 'text-cyan-600'
                           : darkMode ? 'text-gray-500' : 'text-gray-400'
                       )} />
                     </div>
                     <div>
                       <div className={cn(
                         'text-sm font-medium',
-                        (session?.model ?? settings.defaultModel) === opt.value
+                        isSelected
                           ? darkMode ? 'text-white/90' : 'text-gray-800'
                           : darkMode ? 'text-white/65' : 'text-gray-600'
                       )}>{opt.label}</div>
@@ -936,14 +949,16 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                       )}>{opt.desc}</div>
                     </div>
                   </div>
-                  {(session?.model ?? settings.defaultModel) === opt.value && (
+                  {isSelected && (
                     <div className={cn(
                       'w-2 h-2 rounded-full',
                       darkMode ? 'bg-cyan-400 shadow-[0_0_8px_rgba(0,229,255,0.6)]' : 'bg-indigo-500'
                     )} />
                   )}
                 </button>
-              ))}
+                  );
+                });
+              })()}
             </div>
           </section>
 
@@ -1271,14 +1286,176 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
             </div>
           </section>
 
+          {/* ═══ Notifications & Behavior ═══ */}
+          <section className="mb-6">
+            <h3 className={cn(
+              'flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider mb-3',
+              darkMode ? 'text-gray-500' : 'text-gray-400'
+            )}>
+              <Bell className="w-3 h-3" />
+              通知与行为
+            </h3>
+
+            {/* Desktop notifications */}
+            <div className="mb-3">
+              <button
+                onClick={() => { playClick(); setNotificationsEnabled(!settings.notificationsEnabled); }}
+                className="flex items-center gap-2.5 w-full"
+              >
+                <div className={cn(
+                  'relative w-9 h-5 rounded-full transition-colors duration-200',
+                  settings.notificationsEnabled
+                    ? darkMode ? 'bg-cyan-500/30' : 'bg-indigo-500'
+                    : darkMode ? 'bg-white/[0.08]' : 'bg-gray-200'
+                )}>
+                  <div className={cn(
+                    'absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200 bg-white shadow-sm',
+                    settings.notificationsEnabled ? 'left-[18px]' : 'left-[2px]'
+                  )} />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {settings.notificationsEnabled ? (
+                    <Bell className={cn('w-3.5 h-3.5', darkMode ? 'text-cyan-400' : 'text-indigo-500')} />
+                  ) : (
+                    <BellOff className={cn('w-3.5 h-3.5', darkMode ? 'text-gray-500' : 'text-gray-400')} />
+                  )}
+                  <span className={cn('text-xs', darkMode ? 'text-gray-300' : 'text-gray-600')}>
+                    桌面通知（回复完成时提醒）
+                  </span>
+                </div>
+              </button>
+            </div>
+
+            {/* AI auto title */}
+            <div className="mb-3">
+              <button
+                onClick={() => { playClick(); setAutoTitleAI(!settings.autoTitleAI); }}
+                className="flex items-center gap-2.5 w-full"
+              >
+                <div className={cn(
+                  'relative w-9 h-5 rounded-full transition-colors duration-200',
+                  settings.autoTitleAI
+                    ? darkMode ? 'bg-cyan-500/30' : 'bg-indigo-500'
+                    : darkMode ? 'bg-white/[0.08]' : 'bg-gray-200'
+                )}>
+                  <div className={cn(
+                    'absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200 bg-white shadow-sm',
+                    settings.autoTitleAI ? 'left-[18px]' : 'left-[2px]'
+                  )} />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Bot className={cn('w-3.5 h-3.5', darkMode ? 'text-purple-400' : 'text-purple-500')} />
+                  <span className={cn('text-xs', darkMode ? 'text-gray-300' : 'text-gray-600')}>
+                    AI 自动生成对话标题
+                  </span>
+                </div>
+              </button>
+            </div>
+
+            {/* Context bar */}
+            <div className="mb-3">
+              <button
+                onClick={() => { playClick(); setShowContextBar(!settings.showContextBar); }}
+                className="flex items-center gap-2.5 w-full"
+              >
+                <div className={cn(
+                  'relative w-9 h-5 rounded-full transition-colors duration-200',
+                  settings.showContextBar
+                    ? darkMode ? 'bg-cyan-500/30' : 'bg-indigo-500'
+                    : darkMode ? 'bg-white/[0.08]' : 'bg-gray-200'
+                )}>
+                  <div className={cn(
+                    'absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200 bg-white shadow-sm',
+                    settings.showContextBar ? 'left-[18px]' : 'left-[2px]'
+                  )} />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Gauge className={cn('w-3.5 h-3.5', darkMode ? 'text-emerald-400' : 'text-emerald-500')} />
+                  <span className={cn('text-xs', darkMode ? 'text-gray-300' : 'text-gray-600')}>
+                    显示上下文窗口用量条
+                  </span>
+                </div>
+              </button>
+            </div>
+
+            {/* Voice auto-send */}
+            <div className="mb-3">
+              <button
+                onClick={() => { playClick(); setVoiceAutoSend(!settings.voiceAutoSend); }}
+                className="flex items-center gap-2.5 w-full"
+              >
+                <div className={cn(
+                  'relative w-9 h-5 rounded-full transition-colors duration-200',
+                  settings.voiceAutoSend
+                    ? darkMode ? 'bg-cyan-500/30' : 'bg-indigo-500'
+                    : darkMode ? 'bg-white/[0.08]' : 'bg-gray-200'
+                )}>
+                  <div className={cn(
+                    'absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200 bg-white shadow-sm',
+                    settings.voiceAutoSend ? 'left-[18px]' : 'left-[2px]'
+                  )} />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Mic className={cn('w-3.5 h-3.5', darkMode ? 'text-rose-400' : 'text-rose-500')} />
+                  <span className={cn('text-xs', darkMode ? 'text-gray-300' : 'text-gray-600')}>
+                    语音输入后自动发送
+                  </span>
+                </div>
+              </button>
+            </div>
+          </section>
+
+          {/* ═══ API 提供商管理 ═══ */}
+          <section className="mb-6">
+            <h3 className={cn(
+              'flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider mb-3',
+              darkMode ? 'text-gray-500' : 'text-gray-400'
+            )}>
+              <Server className="w-3 h-3" />
+              API 提供商与模型
+            </h3>
+            <ProviderManager darkMode={darkMode} />
+          </section>
+
           {/* ═══ Data Management ═══ */}
+          {/* Language selector */}
+          <section className="mb-6">
+            <h3 className={cn(
+              'flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider mb-3',
+              darkMode ? 'text-gray-500' : 'text-gray-400'
+            )}>
+              <Globe className="w-3 h-3" />
+              {t('settings.language')}
+            </h3>
+            <div className="flex gap-2">
+              {(['zh', 'en'] as const).map((lang) => (
+                <button
+                  key={lang}
+                  onClick={() => { playClick(); i18n.changeLanguage(lang); setLanguage(lang); }}
+                  className={cn(
+                    'flex-1 py-2 rounded-lg text-sm transition-all duration-200',
+                    i18n.language === lang
+                      ? darkMode
+                        ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+                        : 'bg-indigo-100 text-indigo-600 border border-indigo-200'
+                      : darkMode
+                        ? 'bg-white/[0.03] border border-white/[0.06] text-gray-500 hover:text-gray-300'
+                        : 'bg-gray-50 border border-gray-200 text-gray-500 hover:text-gray-700'
+                  )}
+                >
+                  {lang === 'zh' ? '中文' : 'English'}
+                </button>
+              ))}
+            </div>
+          </section>
+
           <section>
             <h3 className={cn(
               'flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider mb-3',
               darkMode ? 'text-gray-500' : 'text-gray-400'
             )}>
               <Download className="w-3 h-3" />
-              数据管理
+              {t('settings.dataManagement')}
             </h3>
 
             <div className="flex flex-wrap gap-2">

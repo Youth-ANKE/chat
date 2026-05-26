@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import type { Settings, AccentColor } from '../types';
+import type { Settings, AccentColor, Language } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
 import { setSoundEnabled as applySoundEnabled, playThemeToggle } from '../lib/sound';
 import { setSpeechEnabled as applySpeechEnabled, setSpeechVoice as applySpeechVoice } from '../lib/speech';
 import { setMusicEnabled as applyMusicEnabled, setMusicMode as applyMusicMode, setMusicVolume as applyMusicVolume, type MusicMode } from '../lib/music';
+import i18n from '../lib/i18n';
 
 const STORAGE_KEY = 'deepseek_settings_v2';
 
@@ -49,6 +50,12 @@ interface SettingsState {
   setAccentColor: (color: AccentColor) => void;
   setFontSize: (size: Settings['fontSize']) => void;
   setShowTimestamps: (on: boolean) => void;
+  setNotificationsEnabled: (on: boolean) => void;
+  setAutoTitleAI: (on: boolean) => void;
+  setShowContextBar: (on: boolean) => void;
+  setLanguage: (lang: Language) => void;
+  setDefaultProviderId: (id: string) => void;
+  setVoiceAutoSend: (on: boolean) => void;
   /** Export settings as JSON string */
   exportSettings: () => string;
   /** Import settings from JSON string, returns success */
@@ -249,6 +256,54 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setShowTimestamps: (on) =>
     set((state) => {
       const s = { ...state.settings, showTimestamps: on };
+      persistSettings(s);
+      return { settings: s };
+    }),
+
+  // ── Notifications ──
+  setNotificationsEnabled: (on: boolean) =>
+    set((state) => {
+      const s = { ...state.settings, notificationsEnabled: on };
+      persistSettings(s);
+      return { settings: s };
+    }),
+
+  // ── Auto title AI ──
+  setAutoTitleAI: (on: boolean) =>
+    set((state) => {
+      const s = { ...state.settings, autoTitleAI: on };
+      persistSettings(s);
+      return { settings: s };
+    }),
+
+  // ── Context bar ──
+  setShowContextBar: (on: boolean) =>
+    set((state) => {
+      const s = { ...state.settings, showContextBar: on };
+      persistSettings(s);
+      return { settings: s };
+    }),
+
+  // ── Language ──
+  setLanguage: (lang: Language) =>
+    set((state) => {
+      const s = { ...state.settings, language: lang };
+      persistSettings(s);
+      return { settings: s };
+    }),
+
+  // ── Default Provider ──
+  setDefaultProviderId: (id: string) =>
+    set((state) => {
+      const s = { ...state.settings, defaultProviderId: id };
+      persistSettings(s);
+      return { settings: s };
+    }),
+
+  // ── Voice Auto-Send ──
+  setVoiceAutoSend: (on: boolean) =>
+    set((state) => {
+      const s = { ...state.settings, voiceAutoSend: on };
       persistSettings(s);
       return { settings: s };
     }),

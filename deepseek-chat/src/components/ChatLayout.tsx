@@ -1,39 +1,75 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
-import { MessageList } from './MessageList';
+import { MessageList, type MessageListHandle } from './MessageList';
 import { Composer, type ComposerHandle } from './Composer';
 import { SettingsPanel } from './SettingsPanel';
 import { ShortcutHelp } from './ShortcutHelp';
+import { AboutPanel } from './AboutPanel';
 import { UsagePanel } from './UsagePanel';
 import { PromptLibrary } from './PromptLibrary';
 import { TechBackground } from './TechBackground';
+import { SharePanel } from './SharePanel';
+import { ImportDialog } from './ImportDialog';
+import { ArtifactPreview } from './ArtifactPreview';
+import { KnowledgeBasePanel } from './KnowledgeBasePanel';
+import { TagsPanel } from './TagsPanel';
+import { OfflineBanner } from './OfflineBanner';
+import { GlobalSearch } from './GlobalSearch';
+import { ContextBar } from './ContextBar';
+import { ModelSelector } from './ModelSelector';
+import { TemplateSelector } from './TemplateSelector';
+import { ComparisonPanel } from './ComparisonPanel';
+import { ScrollNavigator } from './ScrollNavigator';
 import { useChatStore } from '../stores/chatStore';
 import { useUsageStore } from '../stores/usageStore';
-import { createMessage, generateTitle } from '../lib/session';
+import { useProviderStore } from '../stores/providerStore';
+import { getApiBaseUrl } from '../lib/provider-adapter';
+import { createMessage, generateTitle, generateAITitle } from '../lib/session';
 import { streamChat } from '../lib/stream';
-import { Settings, Menu, Trash2, Download, Zap, BarChart3, Headphones, Music } from 'lucide-react';
-import type { ModelName } from '../types';
+import { Settings, Menu, Trash2, Download, Zap, BarChart3, Headphones, Music, Share2, Database, Search, FileJson, HelpCircle, Info, Bot, CalendarClock, GitCompare, Image as ImageIcon } from 'lucide-react';
+import type { ModelName, ChatMessage, ConversationTemplate } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
 import { playClick, playToggleOn, playToggleOff, playSend, playStop, playDelete, playExport, playRegenerate } from '../lib/sound';
 import { speakChunk, flushSpeech, stopSpeech } from '../lib/speech';
+import { notifyResponseDone, notifyError } from '../lib/notification';
+import { exportAsPNG, exportAsPDF } from '../lib/export-file';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmDialog';
+import { useTranslation } from 'react-i18next';
+import { nanoid } from 'nanoid';
+import { saveSession } from '../lib/storage';
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 2.5);
 }
 
 export function ChatLayout() {
+  const { t } = useTranslation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutOpen, setShortcutOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [usageOpen, setUsageOpen] = useState(false);
   const [promptLibraryOpen, setPromptLibraryOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [knowledgeOpen, setKnowledgeOpen] = useState(false);
+  const [bookmarksOpen, setBookmarksOpen] = useState(false);
+  const [tagsOpen, setTagsOpen] = useState<string | null>(null);
+  const [artifactCode, setArtifactCode] = useState<{ code: string; lang: string } | null>(null);
   const [messageSearch, setMessageSearch] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+  const [templateSelectorOpen, setTemplateSelectorOpen] = useState(false);
+  const [comparisonOpen, setComparisonOpen] = useState(false);
+  const [timelineMode, setTimelineMode] = useState(false);
+  const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<ComposerHandle>(null);
+  const messageListRef = useRef<MessageListHandle>(null);
+  const messageAreaRef = useRef<HTMLDivElement>(null);
 
   const { toast } = useToast();
   const { confirm } = useConfirm();
@@ -54,8 +90,11 @@ export function ChatLayout() {
   const clearMessages = useChatStore((s) => s.clearMessages);
   const setMessages = useChatStore((s) => s.setMessages);
   const exportConversation = useChatStore((s) => s.exportConversation);
+  const exportConversationJSON = useChatStore((s) => s.exportConversationJSON);
   const newSession = useChatStore((s) => s.newSession);
   const setWebSearch = useChatStore((s) => s.setWebSearch);
+  const notificationsEnabled = useSettingsStore((s) => s.settings.notificationsEnabled);
+  const autoTitleAI = useSettingsStore((s) => s.settings.autoTitleAI);
 
   const addUsageRecord = useUsageStore((s) => s.addRecord);
   const settings = useSettingsStore((s) => s.settings);
@@ -66,17 +105,83 @@ export function ChatLayout() {
   // Stop speech when switching sessions
   useEffect(() => {
     stopSpeech();
+    titleGeneratedRef.current = false;
   }, [activeId]);
 
-  // Auto-generate title from first user message
+  // Online/offline detection
+  useEffect(() => {
+    const online = () => setIsOnline(true);
+    const offline = () => setIsOnline(false);
+    window.addEventListener('online', online);
+    window.addEventListener('offline', offline);
+    return () => {
+      window.removeEventListener('online', online);
+      window.removeEventListener('offline', offline);
+    };
+  }, []);
+
+  // Check for shared conversation in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const shareData = params.get('share');
+    if (shareData) {
+      try {
+        const data = JSON.parse(decodeURIComponent(atob(shareData)));
+        const sharedSession = {
+          id: nanoid(),
+          title: data.t || data.title || 'Shared Chat',
+          messages: (data.msgs || data.messages || []).map((m: { r: string; c: string; re?: string; role?: string; content?: string; reasoning?: string }) => ({
+            id: nanoid(),
+            role: (m.r || m.role) === 'assistant' ? 'assistant' as const : 'user' as const,
+            content: m.c || m.content || '',
+            reasoning: m.re || m.reasoning,
+            createdAt: new Date().toISOString(),
+            status: 'done' as const,
+          })),
+          model: (data.m || 'deepseek-v4-flash') as ModelName,
+          thinking: true,
+          temperature: 0.7,
+          topP: 1.0,
+          maxTokens: 4096,
+          webSearch: false,
+          pinned: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        const { sessions } = useChatStore.getState();
+        useChatStore.setState({
+          sessions: [sharedSession, ...sessions],
+          activeId: sharedSession.id,
+        });
+        saveSession(sharedSession);
+        // Clean up URL
+        window.history.replaceState({}, '', window.location.pathname);
+        toast('已导入分享的对话', 'success');
+      } catch { /* ignore invalid share data */ }
+    }
+  }, [toast]);
+
+  // Auto-generate title from first user message (with optional AI generation)
   const titleGeneratedRef = useRef(false);
   useEffect(() => {
     const msgs = getActiveMessages();
     if (msgs.length >= 2 && !titleGeneratedRef.current && session) {
       const firstUser = msgs.find((m) => m.role === 'user');
       if (firstUser) {
-        renameSession(session.id, generateTitle(firstUser.content));
         titleGeneratedRef.current = true;
+        if (autoTitleAI) {
+          // AI-generated title (async, non-blocking)
+          generateAITitle(firstUser.content, session.model, settings)
+            .then((title) => {
+              renameSession(session.id, title);
+            })
+            .catch(() => {
+              // Fallback to simple truncation
+              renameSession(session.id, generateTitle(firstUser.content));
+            });
+        } else {
+          renameSession(session.id, generateTitle(firstUser.content));
+        }
       }
     }
     if (msgs.length === 0) {
@@ -115,6 +220,9 @@ export function ChatLayout() {
         ];
       }
 
+      const providers = useProviderStore.getState().providers;
+      const apiBase = getApiBaseUrl(currentSession.providerId ?? 'deepseek', providers);
+
       await streamChat(
         {
           messages: streamMessages,
@@ -126,6 +234,7 @@ export function ChatLayout() {
           webSearch: currentSession.webSearch,
           topP: currentSession.topP ?? settings.topP,
           streamOutput: settings.streamOutput,
+          apiBase,
         },
         {
           signal: abortController.signal,
@@ -162,12 +271,18 @@ export function ChatLayout() {
               error,
             });
             setIsStreaming(false);
+            if (useSettingsStore.getState().settings.notificationsEnabled) {
+              notifyError(error);
+            }
           },
           onDone: () => {
             updateMessage(localActiveId, assistantMsgId, { status: 'done' });
             setIsStreaming(false);
             if (useSettingsStore.getState().settings.speechEnabled) {
               flushSpeech();
+            }
+            if (useSettingsStore.getState().settings.notificationsEnabled) {
+              notifyResponseDone(currentSession.title);
             }
           },
         }
@@ -184,6 +299,10 @@ export function ChatLayout() {
       if (!currentSession) return;
 
       const userMsg = createMessage('user', content, 'done');
+      if (replyTarget) {
+        userMsg.replyTo = replyTarget.id;
+        setReplyTarget(null);
+      }
       if (attachments && attachments.length > 0) {
         userMsg.attachments = attachments.map((a, i) => ({
           id: `att-${Date.now()}-${i}`,
@@ -306,20 +425,26 @@ export function ChatLayout() {
     setIsStreaming(false);
   }, [activeId, getActiveMessages, updateMessage]);
 
-  const handleExport = useCallback(() => {
+  const handleExport = useCallback((format: 'md' | 'json' = 'md') => {
     if (!activeId) return;
     playExport();
-    const md = exportConversation(activeId);
-    if (!md) return;
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const content = format === 'json'
+      ? exportConversationJSON(activeId)
+      : exportConversation(activeId);
+    if (!content) return;
+    const mimeType = format === 'json'
+      ? 'application/json;charset=utf-8'
+      : 'text/markdown;charset=utf-8';
+    const ext = format === 'json' ? 'json' : 'md';
+    const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${session?.title ?? 'conversation'}.md`;
+    a.download = `${session?.title ?? 'conversation'}.${ext}`;
     a.click();
     URL.revokeObjectURL(url);
     toast('导出成功', 'success');
-  }, [activeId, session, exportConversation, toast]);
+  }, [activeId, session, exportConversation, exportConversationJSON, toast]);
 
   const handleClear = useCallback(async () => {
     if (!activeId) return;
@@ -339,6 +464,109 @@ export function ChatLayout() {
   const handlePromptSelect = useCallback((promptText: string) => {
     inputRef.current?.insertText(promptText);
   }, []);
+
+  // Share button handler
+  const handleShare = useCallback(() => {
+    if (!session) return;
+    playClick();
+    setShareOpen(true);
+  }, [session]);
+
+  // Branch conversation
+  const handleBranch = useCallback(async (msgId: string) => {
+    if (!activeId || !session) return;
+    const msgs = session.messages;
+    const idx = msgs.findIndex((m) => m.id === msgId);
+    if (idx === -1) return;
+
+    playClick();
+    const branchMsgs = msgs.slice(0, idx + 1);
+    const newSess = {
+      id: nanoid(),
+      title: `${session.title} (fork)`,
+      messages: branchMsgs,
+      model: session.model,
+      thinking: session.thinking,
+      temperature: session.temperature,
+      topP: session.topP,
+      maxTokens: session.maxTokens,
+      webSearch: session.webSearch,
+      parentSessionId: session.id,
+      branchPoint: idx,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const { sessions } = useChatStore.getState();
+    useChatStore.setState({
+      sessions: [newSess, ...sessions],
+      activeId: newSess.id,
+    });
+    saveSession(newSess);
+    toast('已分叉对话', 'success');
+  }, [activeId, session, toast]);
+
+  // Tag management
+  const handleAddTag = useCallback((tag: string) => {
+    if (!activeId) return;
+    useChatStore.setState((state) => ({
+      sessions: state.sessions.map((s) => {
+        if (s.id !== activeId) return s;
+        const tags = s.tags || [];
+        const updated = { ...s, tags: [...tags, tag], updatedAt: new Date().toISOString() };
+        saveSession(updated);
+        return updated;
+      }),
+    }));
+  }, [activeId]);
+
+  const handleRemoveTag = useCallback((tag: string) => {
+    if (!activeId) return;
+    useChatStore.setState((state) => ({
+      sessions: state.sessions.map((s) => {
+        if (s.id !== activeId) return s;
+        const tags = (s.tags || []).filter((t) => t !== tag);
+        const updated = { ...s, tags, updatedAt: new Date().toISOString() };
+        saveSession(updated);
+        return updated;
+      }),
+    }));
+  }, [activeId]);
+
+  const handleTemplateSelect = useCallback((tpl: ConversationTemplate) => {
+    const s = newSession();
+    useChatStore.getState().setSystemPrompt(s.id, tpl.systemPrompt);
+    renameSession(s.id, tpl.name);
+  }, [newSession, renameSession]);
+
+  const handleReply = useCallback((msg: ChatMessage) => {
+    setReplyTarget(msg);
+    inputRef.current?.textarea?.focus();
+  }, []);
+
+  const handleExportImage = useCallback(async (format: 'png' | 'pdf') => {
+    playExport();
+    const container = document.querySelector('.chat-messages-container');
+    if (!container) return;
+    try {
+      let blob: Blob | null = null;
+      if (format === 'png') {
+        blob = await exportAsPNG(container as HTMLElement);
+      } else {
+        blob = await exportAsPDF(container as HTMLElement);
+      }
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${session?.title ?? 'conversation'}.${format}`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast(`导出 ${format.toUpperCase()} 成功`, 'success');
+      }
+    } catch {
+      toast('导出失败，请重试', 'error');
+    }
+  }, [session, toast]);
 
   const handleToggleWebSearch = useCallback(() => {
     if (!activeId) return;
@@ -404,6 +632,10 @@ export function ChatLayout() {
         e.preventDefault();
         setPromptLibraryOpen((v) => !v);
       }
+      if (ctrl && e.shiftKey && e.key === 'F') {
+        e.preventDefault();
+        setGlobalSearchOpen((v) => !v);
+      }
       if (e.key === 'Escape') {
         setMessageSearch('');
         setPromptLibraryOpen(false);
@@ -422,6 +654,9 @@ export function ChatLayout() {
       <Sidebar
         collapsed={sidebarCollapsed}
         onToggle={() => { playClick(); setSidebarCollapsed((v) => !v); }}
+        onOpenImport={() => setImportOpen(true)}
+        onOpenBookmarks={() => setBookmarksOpen(true)}
+        onOpenTags={(id) => setTagsOpen(id)}
       />
 
       {/* Main chat area */}
@@ -451,16 +686,60 @@ export function ChatLayout() {
               </h2>
             </div>
             {session && (
-              <span className={`hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] ${
-                darkMode ? 'bg-white/[0.04] text-cyan-400/70 border border-cyan-500/10' : 'bg-gray-100 text-indigo-500'
-              }`}>
-                <Zap className="w-2.5 h-2.5" />
-                {session.model === 'deepseek-v4-pro' ? 'V4 Pro' : 'V4 Flash'}
-              </span>
+              <ModelSelector
+                currentModel={session.model}
+                currentProviderId={session.providerId}
+                onSelect={(providerId, modelId) => {
+                  // Set model and provider on the session
+                  useChatStore.setState((state) => ({
+                    sessions: state.sessions.map((s) =>
+                      s.id === activeId ? { ...s, model: modelId as ModelName, providerId, updatedAt: new Date().toISOString() } : s
+                    ),
+                  }));
+                  const updated = useChatStore.getState().sessions.find((s) => s.id === activeId);
+                  if (updated) saveSession(updated);
+                }}
+                minimal
+              />
             )}
           </div>
 
           <div className="flex items-center gap-1">
+            {/* Template selector */}
+            <button
+              onClick={() => { playClick(); setTemplateSelectorOpen(true); }}
+              className={`p-1.5 rounded-lg transition-colors ${
+                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-amber-400' : 'hover:bg-gray-100 text-gray-400'
+              }`}
+              title="对话模板"
+            >
+              <Bot className="w-4 h-4" />
+            </button>
+
+            {/* Timeline toggle */}
+            <button
+              onClick={() => { playClick(); setTimelineMode((v) => !v); }}
+              className={`p-1.5 rounded-lg transition-colors ${
+                timelineMode
+                  ? darkMode ? 'text-cyan-400 bg-cyan-500/10' : 'text-indigo-600 bg-indigo-50'
+                  : darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-cyan-400' : 'hover:bg-gray-100 text-gray-400'
+              }`}
+              title={timelineMode ? '时间线视图 (已开启)' : '时间线视图'}
+            >
+              <CalendarClock className="w-4 h-4" />
+            </button>
+
+            {/* A/B comparison */}
+            <button
+              onClick={() => { playClick(); setComparisonOpen(true); }}
+              className={`p-1.5 rounded-lg transition-colors ${
+                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-purple-400' : 'hover:bg-gray-100 text-gray-400'
+              }`}
+              title="模型对比"
+            >
+              <GitCompare className="w-4 h-4" />
+            </button>
+
             {/* Token count */}
             {activeMessages.length > 0 && (
               <span className={`hidden sm:flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-mono ${
@@ -490,8 +769,18 @@ export function ChatLayout() {
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
+            {/* Global search */}
             <button
-              onClick={handleExport}
+              onClick={() => { playClick(); setGlobalSearchOpen(true); }}
+              className={`p-1.5 rounded-lg transition-colors ${
+                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-amber-400' : 'hover:bg-gray-100 text-gray-400'
+              }`}
+              title="全局搜索 (Ctrl+Shift+F)"
+            >
+              <Search className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleExport('md')}
               disabled={activeMessages.length === 0}
               className={`px-2 py-1 rounded-lg text-xs transition-colors disabled:opacity-30 ${
                 darkMode ? 'text-gray-400 hover:text-cyan-400 hover:bg-white/5' : 'text-gray-500 hover:bg-gray-100'
@@ -499,6 +788,45 @@ export function ChatLayout() {
               title="导出 Markdown (Ctrl+Shift+E)"
             >
               <Download className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => handleExport('json')}
+              disabled={activeMessages.length === 0}
+              className={`px-2 py-1 rounded-lg text-xs transition-colors disabled:opacity-30 ${
+                darkMode ? 'text-gray-400 hover:text-emerald-400 hover:bg-white/5' : 'text-gray-500 hover:bg-gray-100'
+              }`}
+              title="导出 JSON"
+            >
+              <FileJson className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => handleExportImage('png')}
+              disabled={activeMessages.length === 0}
+              className={`px-2 py-1 rounded-lg text-xs transition-colors disabled:opacity-30 ${
+                darkMode ? 'text-gray-400 hover:text-amber-400 hover:bg-white/5' : 'text-gray-500 hover:bg-gray-100'
+              }`}
+              title="导出为图片"
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={handleShare}
+              disabled={activeMessages.length === 0}
+              className={`px-2 py-1 rounded-lg text-xs transition-colors disabled:opacity-30 ${
+                darkMode ? 'text-gray-400 hover:text-purple-400 hover:bg-white/5' : 'text-gray-500 hover:bg-gray-100'
+              }`}
+              title={t('share.title')}
+            >
+              <Share2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => { playClick(); setKnowledgeOpen(true); }}
+              className={`p-1.5 rounded-lg transition-colors ${
+                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-cyan-400' : 'hover:bg-gray-100 text-gray-400'
+              }`}
+              title={t('knowledge.knowledgeBase')}
+            >
+              <Database className="w-4 h-4" />
             </button>
             <button
               onClick={() => { playClick(); setUsageOpen(true); }}
@@ -538,6 +866,24 @@ export function ChatLayout() {
               <Music className="w-4 h-4" />
             </button>
             <button
+              onClick={() => { playClick(); setAboutOpen(true); }}
+              className={`p-1.5 rounded-lg transition-colors ${
+                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-purple-400' : 'hover:bg-gray-100 text-gray-400'
+              }`}
+              title="关于"
+            >
+              <Info className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => { playClick(); setShortcutOpen(true); }}
+              className={`p-1.5 rounded-lg transition-colors ${
+                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-cyan-400' : 'hover:bg-gray-100 text-gray-400'
+              }`}
+              title="帮助 (Ctrl+/)"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </button>
+            <button
               onClick={() => { playClick(); setSettingsOpen(true); }}
               className={`p-1.5 rounded-lg transition-colors ${
                 darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-purple-400' : 'hover:bg-gray-100 text-gray-400'
@@ -548,6 +894,14 @@ export function ChatLayout() {
             </button>
           </div>
         </header>
+
+        {/* Context window usage bar */}
+        <ContextBar
+          totalTokens={totalTokens}
+          maxTokens={settings.maxTokens}
+          contextLimit={settings.contextLimit}
+          messageCount={activeMessages.length}
+        />
 
         {/* Messages */}
         {/* Message search bar */}
@@ -569,15 +923,39 @@ export function ChatLayout() {
           </div>
         )}
 
-        <MessageList
-          messages={activeMessages}
-          onSend={handleSend}
-          editingMsgId={editingMsgId}
-          onEdit={handleEdit}
-          onStartEdit={setEditingMsgId}
-          onCancelEdit={() => setEditingMsgId(null)}
-          searchQuery={messageSearch}
-        />
+        {/* Messages area with scroll navigator */}
+        <div ref={messageAreaRef} className="relative flex-1 min-h-0 flex">
+          <div className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col">
+            <MessageList
+              ref={messageListRef}
+              messages={activeMessages}
+              onSend={handleSend}
+              editingMsgId={editingMsgId}
+              onEdit={handleEdit}
+              onStartEdit={setEditingMsgId}
+              onCancelEdit={() => setEditingMsgId(null)}
+              searchQuery={messageSearch}
+              sessionId={activeId || undefined}
+              sessionTitle={session?.title}
+              onPreviewCode={(code, lang) => setArtifactCode({ code, lang })}
+              onBranch={handleBranch}
+              onReply={handleReply}
+              timelineMode={timelineMode}
+            />
+          </div>
+          {/* Right-side scroll navigator */}
+          {activeMessages.length >= 3 && (
+            <div className={`flex items-center py-2 pr-1.5 ${
+              darkMode ? 'opacity-60 hover:opacity-100' : 'opacity-40 hover:opacity-70'
+            } transition-opacity duration-200`}>
+              <ScrollNavigator
+                containerRef={messageAreaRef}
+                darkMode={darkMode}
+                messageCount={activeMessages.length}
+              />
+            </div>
+          )}
+        </div>
 
         {/* Composer */}
         <Composer
@@ -590,6 +968,7 @@ export function ChatLayout() {
           webSearch={session?.webSearch ?? false}
           onToggleWebSearch={handleToggleWebSearch}
           onOpenPromptLibrary={() => setPromptLibraryOpen(true)}
+          replyTo={replyTarget ? { message: replyTarget, onClear: () => setReplyTarget(null) } : undefined}
         />
       </div>
 
@@ -602,6 +981,26 @@ export function ChatLayout() {
       {/* Shortcut help */}
       <ShortcutHelp open={shortcutOpen} onClose={() => { playClick(); setShortcutOpen(false); }} />
 
+      {/* About panel */}
+      <AboutPanel open={aboutOpen} onClose={() => { playClick(); setAboutOpen(false); }} />
+
+      {/* Template selector */}
+      <TemplateSelector
+        open={templateSelectorOpen}
+        onClose={() => { playClick(); setTemplateSelectorOpen(false); }}
+        onSelect={handleTemplateSelect}
+        darkMode={darkMode}
+      />
+
+      {/* Model comparison panel */}
+      {comparisonOpen && (
+        <ComparisonPanel
+          open={comparisonOpen}
+          onClose={() => { playClick(); setComparisonOpen(false); }}
+          darkMode={darkMode}
+        />
+      )}
+
       {/* Prompt library */}
       <PromptLibrary
         open={promptLibraryOpen}
@@ -609,6 +1008,48 @@ export function ChatLayout() {
         onSelect={handlePromptSelect}
         darkMode={darkMode}
       />
+
+      {/* Share panel */}
+      {shareOpen && session && (
+        <SharePanel session={session} onClose={() => setShareOpen(false)} />
+      )}
+
+      {/* Import dialog */}
+      {importOpen && (
+        <ImportDialog onClose={() => setImportOpen(false)} />
+      )}
+
+      {/* Artifact preview */}
+      {artifactCode && (
+        <ArtifactPreview
+          code={artifactCode.code}
+          language={artifactCode.lang}
+          onClose={() => setArtifactCode(null)}
+        />
+      )}
+
+      {/* Knowledge base panel */}
+      {knowledgeOpen && (
+        <KnowledgeBasePanel onClose={() => setKnowledgeOpen(false)} />
+      )}
+
+      {/* Tags panel */}
+      {tagsOpen && (
+        <TagsPanel
+          tags={session?.tags || []}
+          onAddTag={handleAddTag}
+          onRemoveTag={handleRemoveTag}
+          onClose={() => setTagsOpen(null)}
+        />
+      )}
+
+      {/* Global search dialog */}
+      {globalSearchOpen && (
+        <GlobalSearch
+          onClose={() => setGlobalSearchOpen(false)}
+          onNavigate={(sessionId) => useChatStore.getState().switchSession(sessionId)}
+        />
+      )}
     </div>
   );
 }
