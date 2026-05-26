@@ -1,22 +1,28 @@
 # ──────────────────────────────────────────────────────────
-#  DeepSeek Chatbox Lite — CNB CI/CD 配置
+#  DeepSeek Chatbox — CNB CI/CD 配置
+#  流式对话 · 多模型 · PWA · 全功能 AI 聊天终端
 # ──────────────────────────────────────────────────────────
 
 # 全局环境变量（在 CNB 项目设置中配置密钥）
 # DEEPSEEK_API_KEY  — DeepSeek API 密钥（部署时需要）
 
-# 触发条件
+# ── 触发条件 ────────────────────────────────────────────
 push:
   - main
   - develop
   - "feat/**"
   - "fix/**"
+  - "release/**"
 pull_request:
   - main
+  - develop
+tag:
+  - "v*"
 
 # ── Pipeline 阶段定义 ──────────────────────────────────
 
 stages:
+  # Stage 1: 安装依赖
   - name: install
     label: 安装依赖
     image: node:22-alpine
@@ -27,7 +33,9 @@ stages:
         - .npm
     script:
       - npm ci --prefer-offline --no-audit --no-fund
+    timeout: 300
 
+  # Stage 2: TypeScript 类型检查
   - name: typecheck
     label: TypeScript 类型检查
     image: node:22-alpine
@@ -39,19 +47,9 @@ stages:
         - node_modules
     script:
       - npx tsc --noEmit
+    timeout: 120
 
-  - name: lint
-    label: 代码检查
-    image: node:22-alpine
-    needs:
-      - install
-    cache:
-      key: npm-cache
-      paths:
-        - node_modules
-    script:
-      - npx tsc --noEmit
-
+  # Stage 3: 生产构建
   - name: build
     label: 生产构建
     image: node:22-alpine
@@ -67,7 +65,38 @@ stages:
       paths:
         - dist/
       expire: 7d
+    timeout: 300
 
+  # Stage 4: 安全审计（仅 main 分支 & PR）
+  - name: audit
+    label: 安全审计
+    image: node:22-alpine
+    needs:
+      - install
+    rules:
+      - if: $CNB_BRANCH == "main" || $CNB_EVENT == "pull_request"
+    cache:
+      key: npm-cache
+      paths:
+        - node_modules
+    script:
+      - npm audit --audit-level=high --production
+    allow_failure: true
+    timeout: 120
+
+  # Stage 5: Docker 镜像构建（仅 main 分支）
+  - name: docker-build
+    label: Docker 镜像构建
+    image: docker:24-dind
+    needs:
+      - build
+    rules:
+      - if: $CNB_BRANCH == "main"
+    script:
+      - docker build -f .ide/Dockerfile -t deepseek-chat:${CNB_COMMIT_SHORT:-latest} .
+    timeout: 600
+
+  # Stage 6: 部署到 Vercel（仅 main 分支）
   - name: deploy-vercel
     label: 部署到 Vercel
     image: node:22-alpine
@@ -81,3 +110,23 @@ stages:
       - VERCEL_TOKEN
       - VERCEL_ORG_ID
       - VERCEL_PROJECT_ID
+    timeout: 300
+
+  # Stage 7: Release 发布（仅 tag v* 推送）
+  - name: release
+    label: 发布 Release
+    image: node:22-alpine
+    needs:
+      - build
+    rules:
+      - if: $CNB_TAG =~ /^v\d+\.\d+\.\d+$/
+    script:
+      - echo "📦 发布版本: $CNB_TAG"
+      - echo "📋 提交: $CNB_COMMIT"
+      - |
+        npx changelogen@latest --from latest --to $CNB_TAG --output
+    artifacts:
+      paths:
+        - CHANGELOG.md
+      expire: 30d
+    timeout: 120
