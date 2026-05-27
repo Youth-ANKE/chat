@@ -26,8 +26,11 @@
       "dist/**/*",
       "electron/**/*",
       "server.cjs",
-      "api/**/*"
+      "api/**/*",
+      "package.json"
     ],
+    "nodeGypRebuild": false,
+    "npmRebuild": false,
     "extraResources": [
       {
         "from": "public",
@@ -43,7 +46,7 @@
           ]
         }
       ],
-      "icon": "public/favicon.svg"
+      "icon": "public/icon.png"
     },
     "nsis": {
       "oneClick": false,

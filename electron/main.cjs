@@ -1,6 +1,6 @@
-const { app, BrowserWindow, Menu, shell } = require('electron');
+const { app, BrowserWindow, Menu, shell, dialog } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { fork } = require('child_process');
 const http = require('http');
 
 const isDev = !app.isPackaged;
@@ -8,26 +8,42 @@ let mainWindow = null;
 let apiServer = null;
 
 function startApiServer() {
-  return new Promise((resolve, reject) => {
-    apiServer = spawn('node', [path.join(__dirname, '..', 'server.cjs')], {
-      env: { ...process.env, API_PORT: '3000' },
-      stdio: ['ignore', 'pipe', 'pipe'],
+  return new Promise((resolve) => {
+    // In packaged app, use fork (works cross-platform with Electron's Node)
+    // In dev, fork also works as it uses the system Node
+    const serverPath = path.join(__dirname, '..', 'server.cjs');
+    try {
+      apiServer = fork(serverPath, [], {
+        env: { ...process.env, API_PORT: '3000' },
+        silent: true,
+        stdio: 'pipe',
+      });
+    } catch (e) {
+      console.warn('Cannot fork server:', e.message);
+      resolve();
+      return;
+    }
+
+    apiServer.stdout && apiServer.stdout.on('data', (data) => {
+      console.log('[api]', data.toString());
     });
 
-    apiServer.stdout.on('data', (data) => {
-      const msg = data.toString();
-      if (msg.includes('listening') || msg.includes('running')) {
-        resolve();
-      }
-    });
-
-    apiServer.stderr.on('data', (data) => {
+    apiServer.stderr && apiServer.stderr.on('data', (data) => {
       console.error('[api]', data.toString());
     });
 
-    apiServer.on('error', reject);
+    apiServer.on('error', (err) => {
+      console.warn('API server error:', err.message);
+      resolve();
+    });
 
-    // Fallback: resolve after 2 seconds
+    apiServer.on('exit', (code) => {
+      if (code !== 0) {
+        console.warn('API server exited with code:', code);
+      }
+    });
+
+    // Resolve after 2 seconds regardless
     setTimeout(resolve, 2000);
   });
 }
@@ -39,7 +55,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     title: 'DeepChat',
-    icon: path.join(__dirname, '..', 'public', 'favicon.svg'),
+    icon: path.join(__dirname, '..', 'public', 'icon.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -86,6 +102,12 @@ function createWindow() {
     mainWindow = null;
   });
 }
+
+// Handle uncaught errors so the window doesn't silently vanish
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  dialog.showErrorBox('DeepChat 启动错误', err.message || '未知错误，请查看日志');
+});
 
 app.whenReady().then(async () => {
   try {
