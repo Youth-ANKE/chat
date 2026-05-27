@@ -288,10 +288,15 @@ export async function streamChat(
         if (isNonRetryableError(response)) {
           let detail = '';
           try {
-            const err = await response.json();
-            detail = (err as { detail?: string }).detail ?? '';
+            const text = await response.text();
+            try {
+              const err = JSON.parse(text);
+              detail = (err as { detail?: string }).detail ?? '';
+            } catch {
+              detail = text;
+            }
           } catch {
-            detail = await response.text();
+            /* ignore */
           }
           callbacks.onError(detail || `HTTP ${response.status}`);
           return controller;

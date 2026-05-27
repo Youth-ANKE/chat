@@ -12,7 +12,7 @@ export const BUILTIN_PROVIDERS: ModelProvider[] = [
     name: 'DeepSeek',
     type: 'deepseek',
     apiKey: '',
-    baseUrl: 'https://api.deepseek.com',
+    baseUrl: '/api/chat',
     models: [
       { id: 'deepseek-chat', name: 'DeepSeek V3', maxTokens: 8192, supportsThinking: false, supportsVision: false, supportsTools: true },
       { id: 'deepseek-reasoner', name: 'DeepSeek R1', maxTokens: 8192, supportsThinking: true, supportsVision: false, supportsTools: false },
