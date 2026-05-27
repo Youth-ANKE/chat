@@ -20,14 +20,18 @@ import { ModelSelector } from './ModelSelector';
 import { TemplateSelector } from './TemplateSelector';
 import { ComparisonPanel } from './ComparisonPanel';
 import { ScrollNavigator } from './ScrollNavigator';
+import { ToolManager } from './ToolManager';
+import { ShortcutEditor } from './ShortcutEditor';
 import { useChatStore } from '../stores/chatStore';
 import { useUsageStore } from '../stores/usageStore';
 import { useProviderStore } from '../stores/providerStore';
+import { useToolStore } from '../stores/toolStore';
 import { getApiBaseUrl } from '../lib/provider-adapter';
 import { createMessage, generateTitle, generateAITitle } from '../lib/session';
 import { streamChat } from '../lib/stream';
-import { Settings, Menu, Trash2, Download, Zap, BarChart3, Headphones, Music, Share2, Database, Search, FileJson, HelpCircle, Info, Bot, CalendarClock, GitCompare, Image as ImageIcon } from 'lucide-react';
+import { Settings, Menu, Trash2, Download, Zap, BarChart3, Headphones, Music, Share2, Database, Search, FileJson, HelpCircle, Info, Bot, CalendarClock, GitCompare, Image as ImageIcon, Wrench, Keyboard } from 'lucide-react';
 import type { ModelName, ChatMessage, ConversationTemplate } from '../types';
+import { DEFAULT_SHORTCUTS } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
 import { playClick, playToggleOn, playToggleOff, playSend, playStop, playDelete, playExport, playRegenerate } from '../lib/sound';
 import { speakChunk, flushSpeech, stopSpeech } from '../lib/speech';
@@ -65,6 +69,8 @@ export function ChatLayout() {
   const [templateSelectorOpen, setTemplateSelectorOpen] = useState(false);
   const [comparisonOpen, setComparisonOpen] = useState(false);
   const [timelineMode, setTimelineMode] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false);
   const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<ComposerHandle>(null);
@@ -235,6 +241,7 @@ export function ChatLayout() {
           topP: currentSession.topP ?? settings.topP,
           streamOutput: settings.streamOutput,
           apiBase,
+          customTools: useToolStore.getState().getEnabledToolDefinitions(),
         },
         {
           signal: abortController.signal,
@@ -580,46 +587,54 @@ export function ChatLayout() {
 
   const totalTokens = activeMessages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts — dynamic with custom overrides
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const customShortcuts = useSettingsStore.getState().settings.customShortcuts || {};
       const ctrl = e.ctrlKey || e.metaKey;
+      const shift = e.shiftKey;
 
-      if (ctrl && e.key === '/') {
+      // Build key combination string
+      const parts: string[] = [];
+      if (ctrl) parts.push('Ctrl');
+      if (shift) parts.push('Shift');
+      if (e.altKey) parts.push('Alt');
+      const keyName = e.key.length === 1 ? e.key.toUpperCase() : e.key;
+      const combo = parts.length > 0 ? [...parts, keyName].join('+') : keyName;
+
+      // Helper: check if combo matches a shortcut ID
+      const matches = (id: string) => {
+        const keys = customShortcuts[id] || DEFAULT_SHORTCUTS.find((s) => s.id === id)?.defaultKeys;
+        return combo === keys;
+      };
+
+      if (matches('shortcutHelp') || (ctrl && e.key === '/')) {
         e.preventDefault();
         setShortcutOpen((v) => !v);
       }
-      if (ctrl && e.key === 'n') {
+      if (matches('newSession') || (ctrl && e.key === 'n')) {
         e.preventDefault();
         stopSpeech();
         newSession();
       }
-      if (ctrl && e.key === 'b') {
+      if (matches('toggleSidebar') || (ctrl && e.key === 'b')) {
         e.preventDefault();
         setSidebarCollapsed((v) => !v);
       }
-      if (ctrl && e.key === 'e' && !e.shiftKey) {
+      if (matches('focusInput') || (ctrl && e.key === 'e' && !e.shiftKey)) {
         e.preventDefault();
         inputRef.current?.textarea?.focus();
       }
-      if (ctrl && e.key === 'E') {
+      if (matches('exportChat') || (ctrl && e.key === 'E')) {
         e.preventDefault();
         handleExport();
       }
-      if (ctrl && e.key === 'k') {
+      if (matches('clearChat') || (ctrl && e.key === 'k')) {
         e.preventDefault();
         handleClear();
       }
-      if (ctrl && e.key === 'f' && !e.shiftKey) {
+      if (matches('searchMessages') || (ctrl && e.key === 'f' && !e.shiftKey)) {
         e.preventDefault();
-        const currentSearch = messageSearch;
-        // toggle search bar via state trick
-        if (!currentSearch) {
-          setMessageSearch('');
-        } else {
-          setMessageSearch('');
-        }
-        // Focus the search input
         setTimeout(() => {
           const searchInput = document.querySelector<HTMLInputElement>('[data-search-input]');
           if (searchInput) {
@@ -628,13 +643,17 @@ export function ChatLayout() {
           }
         }, 50);
       }
-      if (ctrl && e.key === 'p') {
+      if (matches('promptLibrary') || (ctrl && e.key === 'p')) {
         e.preventDefault();
         setPromptLibraryOpen((v) => !v);
       }
-      if (ctrl && e.shiftKey && e.key === 'F') {
+      if (matches('globalSearch') || (ctrl && shift && e.key === 'F')) {
         e.preventDefault();
         setGlobalSearchOpen((v) => !v);
+      }
+      if (matches('settings') || ((ctrl || e.metaKey) && e.key === ',')) {
+        e.preventDefault();
+        setSettingsOpen((v) => !v);
       }
       if (e.key === 'Escape') {
         setMessageSearch('');
@@ -643,7 +662,7 @@ export function ChatLayout() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [activeId, session, handleExport, handleClear, messageSearch]);
+  }, [activeId, session, handleExport, handleClear, messageSearch, newSession]);
 
   return (
     <div className={`flex h-full ${darkMode ? 'bg-space-dark text-gray-100' : 'bg-chat text-gray-900'}`}>
@@ -884,6 +903,24 @@ export function ChatLayout() {
               <HelpCircle className="w-4 h-4" />
             </button>
             <button
+              onClick={() => { playClick(); setToolsOpen(true); }}
+              className={`p-1.5 rounded-lg transition-colors ${
+                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-amber-400' : 'hover:bg-gray-100 text-gray-400'
+              }`}
+              title="工具管理"
+            >
+              <Wrench className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => { playClick(); setShortcutEditorOpen(true); }}
+              className={`p-1.5 rounded-lg transition-colors ${
+                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-amber-400' : 'hover:bg-gray-100 text-gray-400'
+              }`}
+              title="自定义快捷键"
+            >
+              <Keyboard className="w-4 h-4" />
+            </button>
+            <button
               onClick={() => { playClick(); setSettingsOpen(true); }}
               className={`p-1.5 rounded-lg transition-colors ${
                 darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-purple-400' : 'hover:bg-gray-100 text-gray-400'
@@ -1050,6 +1087,12 @@ export function ChatLayout() {
           onNavigate={(sessionId) => useChatStore.getState().switchSession(sessionId)}
         />
       )}
+
+      {/* Tool Manager */}
+      <ToolManager open={toolsOpen} onClose={() => { playClick(); setToolsOpen(false); }} />
+
+      {/* Shortcut Editor */}
+      <ShortcutEditor open={shortcutEditorOpen} onClose={() => { playClick(); setShortcutEditorOpen(false); }} />
     </div>
   );
 }

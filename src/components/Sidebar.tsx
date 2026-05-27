@@ -11,7 +11,8 @@ import {
   Star,
   Upload,
   Tag,
-  Filter,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useChatStore } from '../stores/chatStore';
@@ -31,7 +32,7 @@ interface SidebarProps {
   onOpenTags?: (sessionId: string) => void;
 }
 
-function groupByDate(sessions: { id: string; title: string; updatedAt: string; pinned?: boolean }[]) {
+function groupByDate(sessions: { id: string; title: string; updatedAt: string; pinned?: boolean; archived?: boolean }[]) {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
@@ -71,15 +72,22 @@ export function Sidebar({ collapsed, onToggle, onOpenImport, onOpenBookmarks, on
   const switchSession = useChatStore((s) => s.switchSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
   const pinSession = useChatStore((s) => s.pinSession);
+  const toggleArchive = useChatStore((s) => s.toggleArchive);
+  const showArchived = useSettingsStore((s) => s.settings.showArchived);
 
   const bookmarks = useBookmarkStore((s) => s.bookmarks);
   const bookmarkCount = bookmarks.length;
 
+  // Separate active and archived
+  const activeSessions = useMemo(() => sessions.filter((s) => !s.archived), [sessions]);
+  const archivedSessions = useMemo(() => sessions.filter((s) => s.archived), [sessions]);
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return sessions;
+    const source = showArchived ? sessions : activeSessions;
+    if (!search.trim()) return source;
     const q = search.toLowerCase();
-    return sessions.filter((s) => s.title.toLowerCase().includes(q));
-  }, [sessions, search]);
+    return source.filter((s) => s.title.toLowerCase().includes(q));
+  }, [showArchived, activeSessions, sessions, search]);
 
   const groups = useMemo(() => groupByDate(filtered), [filtered]);
 
@@ -283,6 +291,23 @@ export function Sidebar({ collapsed, onToggle, onOpenImport, onOpenBookmarks, on
                     }
                   </button>
 
+                  {/* Archive */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); playClick(); toggleArchive(sessionItem.id); }}
+                    className={cn(
+                      'opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all',
+                      darkMode
+                        ? 'text-gray-600 hover:text-amber-400'
+                        : 'text-gray-300 hover:text-amber-500'
+                    )}
+                    title={sessionItem.archived ? '取消归档' : '归档'}
+                  >
+                    {sessionItem.archived
+                      ? <ArchiveRestore className="w-3 h-3" />
+                      : <Archive className="w-3 h-3" />
+                    }
+                  </button>
+
                   {/* Delete */}
                   <button
                     onClick={async (e) => {
@@ -318,6 +343,23 @@ export function Sidebar({ collapsed, onToggle, onOpenImport, onOpenBookmarks, on
       <div className={`px-4 py-3 border-t flex-shrink-0 space-y-2 ${
         darkMode ? 'border-white/[0.04]' : 'border-gray-200/60'
       }`}>
+        {/* Archive toggle */}
+        {archivedSessions.length > 0 && (
+          <button
+            onClick={() => {
+              playClick();
+              useSettingsStore.getState().setShowArchived(!showArchived);
+            }}
+            className={`w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] transition-colors ${
+              showArchived
+                ? darkMode ? 'bg-amber-500/10 text-amber-400 border border-amber-500/15' : 'bg-amber-50 text-amber-600 border border-amber-200'
+                : darkMode ? 'hover:bg-white/[0.05] text-gray-500' : 'hover:bg-gray-200 text-gray-400'
+            }`}
+          >
+            <Archive className="w-3 h-3" />
+            {showArchived ? '显示活跃会话' : `已归档 (${archivedSessions.length})`}
+          </button>
+        )}
         {/* Quick actions */}
         <div className="flex items-center gap-1">
           <button
@@ -347,7 +389,7 @@ export function Sidebar({ collapsed, onToggle, onOpenImport, onOpenBookmarks, on
         <div className={`flex items-center justify-between text-[11px] ${
           darkMode ? 'text-gray-500/70' : 'text-gray-400'
         }`}>
-          <span>{sessions.length} {t('sidebar.sessions')}</span>
+          <span>{activeSessions.length} {t('sidebar.sessions')}</span>
           <kbd className="px-1.5 py-0.5 rounded bg-white/[0.04] border border-white/[0.05] font-mono text-[10px]">
             Ctrl+/
           </kbd>

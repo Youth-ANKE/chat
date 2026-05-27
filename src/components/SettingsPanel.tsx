@@ -49,6 +49,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
     setLanguage,
     setDefaultProviderId,
     setVoiceAutoSend,
+    setShowArchived,
     exportSettings,
     importSettings,
     resetSettings,
@@ -1399,6 +1400,32 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                   <Mic className={cn('w-3.5 h-3.5', darkMode ? 'text-rose-400' : 'text-rose-500')} />
                   <span className={cn('text-xs', darkMode ? 'text-gray-300' : 'text-gray-600')}>
                     语音输入后自动发送
+                  </span>
+                </div>
+              </button>
+            </div>
+
+            {/* Archive toggle */}
+            <div className="mb-3">
+              <button
+                onClick={() => { playClick(); setShowArchived(!settings.showArchived); }}
+                className="flex items-center gap-2.5 w-full"
+              >
+                <div className={cn(
+                  'relative w-9 h-5 rounded-full transition-colors duration-200',
+                  settings.showArchived
+                    ? darkMode ? 'bg-amber-500/30' : 'bg-amber-500'
+                    : darkMode ? 'bg-white/[0.08]' : 'bg-gray-200'
+                )}>
+                  <div className={cn(
+                    'absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200 bg-white shadow-sm',
+                    settings.showArchived ? 'left-[18px]' : 'left-[2px]'
+                  )} />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Server className={cn('w-3.5 h-3.5', darkMode ? 'text-amber-400' : 'text-amber-500')} />
+                  <span className={cn('text-xs', darkMode ? 'text-gray-300' : 'text-gray-600')}>
+                    侧栏显示已归档对话
                   </span>
                 </div>
               </button>

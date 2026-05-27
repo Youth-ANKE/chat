@@ -64,6 +64,8 @@ export interface ChatSession {
   parentSessionId?: string;
   /** 分叉节点的消息索引 */
   branchPoint?: number;
+  /** 是否已归档 */
+  archived?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -108,6 +110,8 @@ export interface Settings {
   customShortcuts?: Record<string, string>;
   /** Whether voice input auto-sends */
   voiceAutoSend: boolean;
+  /** Whether to show archived sessions in sidebar */
+  showArchived: boolean;
 }
 
 // ── Usage / Cost Tracking ──
@@ -179,6 +183,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showContextBar: true,
   language: 'zh',
   voiceAutoSend: false,
+  showArchived: false,
 };
 
 export const ACCENT_COLORS: { value: AccentColor; label: string; class: string; glow: string }[] = [
@@ -231,6 +236,18 @@ export interface ToolDefinition {
     }>;
     required: string[];
   };
+}
+
+export interface UserTool {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  /** JSON Schema for parameters */
+  parameterSchema: string;
+  /** JavaScript function body (runs in sandbox) */
+  handlerCode: string;
+  createdAt: string;
 }
 
 // ── Model Provider ──

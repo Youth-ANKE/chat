@@ -24,6 +24,8 @@ interface ChatState {
   setTopP: (id: string, topP: number) => void;
   setMaxTokens: (id: string, maxTokens: number) => void;
   pinSession: (id: string) => void;
+  /** Archive / unarchive a session */
+  toggleArchive: (id: string) => void;
   setMessages: (sessionId: string, messages: ChatMessage[]) => void;
 
   // Message actions
@@ -186,6 +188,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
     const session = get().sessions.find((s) => s.id === id);
     if (session) saveSession(session);
+  },
+
+  toggleArchive: (id) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) => {
+        if (s.id !== id) return s;
+        const nextArchived = !s.archived;
+        // If archiving, also unpin
+        const updated = { ...s, archived: nextArchived, pinned: s.archived ? s.pinned : false, updatedAt: new Date().toISOString() };
+        saveSession(updated);
+        return updated;
+      }),
+    }));
+    // If archiving the active session, switch to first non-archived
+    const { activeId, sessions } = get();
+    const target = sessions.find((s) => s.id === id);
+    if (activeId === id && target?.archived) {
+      const firstActive = sessions.find((s) => !s.archived);
+      if (firstActive) {
+        set({ activeId: firstActive.id });
+      }
+    }
   },
 
   setMessages: (sessionId, messages) => {

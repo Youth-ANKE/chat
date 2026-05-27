@@ -166,6 +166,8 @@ export async function streamChat(
     apiBase?: string;
     /** Custom API key */
     apiKey?: string;
+    /** Custom user-defined tools (merged with web_search if enabled) */
+    customTools?: { name: string; description: string; parameters: Record<string, unknown> }[];
   },
   callbacks: StreamCallbacks
 ): Promise<AbortController> {
@@ -230,26 +232,44 @@ export async function streamChat(
     body.top_p = Math.round(params.topP * 100) / 100;
   }
 
+  // Build tools array (web_search + custom tools)
+  const tools: Record<string, unknown>[] = [];
+
   if (params.webSearch) {
-    body.tools = [
-      {
-        type: 'function',
-        function: {
-          name: 'web_search',
-          description: 'Search the web for real-time information',
-          parameters: {
-            type: 'object',
-            properties: {
-              query: {
-                type: 'string',
-                description: 'The search query',
-              },
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'web_search',
+        description: 'Search the web for real-time information',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'The search query',
             },
-            required: ['query'],
           },
+          required: ['query'],
         },
       },
-    ];
+    });
+  }
+
+  if (params.customTools && params.customTools.length > 0) {
+    for (const ct of params.customTools) {
+      tools.push({
+        type: 'function',
+        function: {
+          name: ct.name,
+          description: ct.description,
+          parameters: ct.parameters,
+        },
+      });
+    }
+  }
+
+  if (tools.length > 0) {
+    body.tools = tools;
   }
 
   const shouldStream = params.streamOutput !== false; // default: true

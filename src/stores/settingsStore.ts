@@ -56,6 +56,8 @@ interface SettingsState {
   setLanguage: (lang: Language) => void;
   setDefaultProviderId: (id: string) => void;
   setVoiceAutoSend: (on: boolean) => void;
+  setShowArchived: (on: boolean) => void;
+  setCustomShortcuts: (shortcuts: Record<string, string>) => void;
   /** Export settings as JSON string */
   exportSettings: () => string;
   /** Import settings from JSON string, returns success */
@@ -304,6 +306,22 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setVoiceAutoSend: (on: boolean) =>
     set((state) => {
       const s = { ...state.settings, voiceAutoSend: on };
+      persistSettings(s);
+      return { settings: s };
+    }),
+
+  // ── Show Archived ──
+  setShowArchived: (on: boolean) =>
+    set((state) => {
+      const s = { ...state.settings, showArchived: on };
+      persistSettings(s);
+      return { settings: s };
+    }),
+
+  // ── Custom Shortcuts ──
+  setCustomShortcuts: (shortcuts: Record<string, string>) =>
+    set((state) => {
+      const s = { ...state.settings, customShortcuts: shortcuts };
       persistSettings(s);
       return { settings: s };
     }),
