@@ -1,7 +1,10 @@
-import { X, Plus, Eye, EyeOff, Key, Globe, Trash2 } from 'lucide-react';
+import { X, Plus, Eye, EyeOff, Key, Globe, Trash2, Info } from 'lucide-react';
 import { useState } from 'react';
 import type { ModelProvider, ProviderModel } from '../types';
 import { useProviderStore } from '../stores/providerStore';
+
+/** Detect if running inside Electron */
+const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI?.isElectron;
 
 interface ProviderManagerProps {
   darkMode: boolean;
@@ -180,9 +183,29 @@ export function ProviderManager({ darkMode }: ProviderManagerProps) {
         ))}
       </div>
 
-      <p className={`text-[10px] ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-        API Key 仅存储在浏览器本地，通过后端代理访问，不会直接暴露给前端请求。
-      </p>
+      {isElectron ? (
+        <div className={`flex items-start gap-2 p-3 rounded-xl text-[11px] leading-relaxed ${
+          darkMode ? 'bg-cyan-500/[0.06] border border-cyan-500/15' : 'bg-indigo-50 border border-indigo-200'
+        }`}>
+          <Info className={`w-4 h-4 mt-0.5 shrink-0 ${darkMode ? 'text-cyan-400' : 'text-indigo-500'}`} />
+          <div className={darkMode ? 'text-gray-300' : 'text-gray-600'}>
+            <p className="font-semibold mb-1">桌面版 API Key 配置说明</p>
+            <p>
+              桌面应用<strong>不经过云端代理</strong>，请求会直接从你的电脑发送到各 AI 服务商。
+            </p>
+            <p className="mt-1">
+              请在对应服务商处填入正确的 <strong>API Key</strong> 和 <strong>Base URL</strong>（DeepSeek 已自动配置为 <code className={darkMode ? 'text-cyan-400' : 'text-indigo-600'}>https://api.deepseek.com</code>）。
+            </p>
+            <p className="mt-1">
+              Key 仅存储在本地，不会上传到任何服务器。
+            </p>
+          </div>
+        </div>
+      ) : (
+        <p className={`text-[10px] ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+          API Key 仅存储在浏览器本地，通过后端代理访问，不会直接暴露给前端请求。
+        </p>
+      )}
     </div>
   );
 }

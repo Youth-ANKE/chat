@@ -6,6 +6,9 @@
 import type { ModelProvider, ProviderModel } from '../types';
 import { DEFAULT_DEEPSEEK_MODEL } from '../types';
 
+/** Detect if running inside Electron */
+const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI?.isElectron;
+
 /** Default built-in providers */
 export const BUILTIN_PROVIDERS: ModelProvider[] = [
   {
@@ -13,7 +16,8 @@ export const BUILTIN_PROVIDERS: ModelProvider[] = [
     name: 'DeepSeek',
     type: 'deepseek',
     apiKey: '',
-    baseUrl: '/api/chat',
+    // In Electron: go direct to DeepSeek API (no Vercel proxy). In web: use the proxy.
+    baseUrl: isElectron ? 'https://api.deepseek.com' : '/api/chat',
     models: [
       { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', maxTokens: 8192, supportsThinking: false, supportsVision: false, supportsTools: true, pricing: { inputPerMillion: 1, outputPerMillion: 2 } },
       { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', maxTokens: 8192, supportsThinking: true, supportsVision: false, supportsTools: true, pricing: { inputPerMillion: 4, outputPerMillion: 16 } },
