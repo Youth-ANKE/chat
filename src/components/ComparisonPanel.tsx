@@ -2,10 +2,23 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { X, Send, Square, GitCompare, Loader2 } from 'lucide-react';
 import { useComparisonStore } from '../stores/comparisonStore';
 import { useProviderStore } from '../stores/providerStore';
-import { getModelById, getApiBaseUrl } from '../lib/provider-adapter';
+import { getModelById, getApiBaseUrl, getApiKey, getAuthType } from '../lib/provider-adapter';
 import { DEFAULT_DEEPSEEK_MODEL } from '../types';
 import { streamChat } from '../lib/stream';
 import { MarkdownRenderer } from './MarkdownRenderer';
+
+/** Friendly label for provider type */
+function providerTypeLabel(type: string): string {
+  const map: Record<string, string> = {
+    deepseek: 'DeepSeek',
+    openai: 'OpenAI',
+    anthropic: 'Anthropic',
+    ollama: 'Ollama',
+    mimo: 'MiMo',
+    custom: '自定义',
+  };
+  return map[type] ?? type;
+}
 
 interface ComparisonPanelProps {
   open: boolean;
@@ -29,10 +42,9 @@ export function ComparisonPanel({ open, onClose, darkMode, initialPrompt }: Comp
   const abortRef = useRef<AbortController | null>(null);
   const providers = useProviderStore((s) => s.providers);
 
-  const getBaseUrl = (pid: string) => {
-    const p = providers.find((x) => x.id === pid);
-    return p?.baseUrl ?? '/api/chat';
-  };
+  const getBaseUrl = (pid: string) => getApiBaseUrl(pid, providers);
+  const getKey = (pid: string) => getApiKey(pid, providers);
+  const getAType = (pid: string) => getAuthType(pid, providers);
 
   const handleCompare = useCallback(async () => {
     if (!prompt.trim()) return;
@@ -52,6 +64,8 @@ export function ComparisonPanel({ open, onClose, darkMode, initialPrompt }: Comp
         messages: [{ role: 'user', content: prompt }],
         model: leftModel,
         apiBase: getBaseUrl(leftProvider),
+        apiKey: getKey(leftProvider),
+        authType: getAType(leftProvider),
         streamOutput: true,
       },
       {
@@ -68,6 +82,8 @@ export function ComparisonPanel({ open, onClose, darkMode, initialPrompt }: Comp
         messages: [{ role: 'user', content: prompt }],
         model: rightModel,
         apiBase: getBaseUrl(rightProvider),
+        apiKey: getKey(rightProvider),
+        authType: getAType(rightProvider),
         streamOutput: true,
       },
       {

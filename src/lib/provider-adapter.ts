@@ -70,6 +70,18 @@ export const BUILTIN_PROVIDERS: ModelProvider[] = [
     models: [],
     enabled: false,
   },
+  {
+    id: 'mimo',
+    name: 'MiMo',
+    type: 'mimo',
+    authType: 'api-key',
+    apiKey: '',
+    baseUrl: 'https://api.xiaomimimo.com/v1',
+    models: [
+      { id: 'mimo-v2.5-pro', name: 'MiMo V2.5 Pro', maxTokens: 8192, supportsThinking: true, supportsVision: false, supportsTools: true, pricing: { inputPerMillion: 0, outputPerMillion: 0 } },
+    ],
+    enabled: false,
+  },
 ];
 
 export function getProviderById(id: string, providers: ModelProvider[]): ModelProvider | undefined {
@@ -101,6 +113,14 @@ export function getApiKey(providerId: string, providers: ModelProvider[]): strin
   const p = getProviderById(providerId, providers);
   if (!p?.apiKey) return undefined;
   return p.apiKey;
+}
+
+/**
+ * Returns the auth type for a provider (defaults to 'bearer').
+ */
+export function getAuthType(providerId: string, providers: ModelProvider[]): 'bearer' | 'api-key' {
+  const p = getProviderById(providerId, providers);
+  return p?.authType ?? 'bearer';
 }
 
 /** Get all enabled providers */

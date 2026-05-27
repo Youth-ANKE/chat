@@ -26,7 +26,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useUsageStore } from '../stores/usageStore';
 import { useProviderStore } from '../stores/providerStore';
 import { useToolStore } from '../stores/toolStore';
-import { getApiBaseUrl } from '../lib/provider-adapter';
+import { getApiBaseUrl, getApiKey, getAuthType } from '../lib/provider-adapter';
 import { createMessage, generateTitle, generateAITitle } from '../lib/session';
 import { streamChat } from '../lib/stream';
 import { Settings, Menu, Trash2, Download, Zap, BarChart3, Headphones, Music, Share2, Database, Search, FileJson, HelpCircle, Info, Bot, CalendarClock, GitCompare, Image as ImageIcon, Wrench, Keyboard } from 'lucide-react';
@@ -177,7 +177,11 @@ export function ChatLayout() {
         titleGeneratedRef.current = true;
         if (autoTitleAI) {
           // AI-generated title (async, non-blocking)
-          generateAITitle(firstUser.content, session.model, settings)
+          const providers = useProviderStore.getState().providers;
+          const apiBase = getApiBaseUrl(session.providerId ?? 'deepseek', providers);
+          const apiKey = getApiKey(session.providerId ?? 'deepseek', providers);
+          const authType = getAuthType(session.providerId ?? 'deepseek', providers);
+          generateAITitle(firstUser.content, session.model, apiBase, apiKey ?? '', authType)
             .then((title) => {
               renameSession(session.id, title);
             })
@@ -228,6 +232,8 @@ export function ChatLayout() {
 
       const providers = useProviderStore.getState().providers;
       const apiBase = getApiBaseUrl(currentSession.providerId ?? 'deepseek', providers);
+      const apiKey = getApiKey(currentSession.providerId ?? 'deepseek', providers);
+      const authType = getAuthType(currentSession.providerId ?? 'deepseek', providers);
 
       await streamChat(
         {
@@ -241,6 +247,8 @@ export function ChatLayout() {
           topP: currentSession.topP ?? settings.topP,
           streamOutput: settings.streamOutput,
           apiBase,
+          apiKey,
+          authType,
           customTools: useToolStore.getState().getEnabledToolDefinitions(),
         },
         {

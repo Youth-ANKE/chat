@@ -40,21 +40,53 @@ export function generateTitle(content: string): string {
 }
 
 /**
- * Generate a concise title for a conversation using the DeepSeek API.
+ * Build headers for the AI title request based on auth type.
+ */
+function buildTitleHeaders(apiKey: string, authType: 'bearer' | 'api-key'): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (authType === 'api-key') {
+    headers['api-key'] = apiKey;
+  } else {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  }
+  return headers;
+}
+
+/**
+ * Generate a concise title for a conversation using the current provider's API.
  * Falls back to the simple `generateTitle` on failure.
  */
 export async function generateAITitle(
   content: string,
   model: string,
-  settings: Settings
+  apiBase: string,
+  apiKey: string,
+  authType: 'bearer' | 'api-key'
 ): Promise<string> {
   try {
+    // Defensive: skip if apiBase looks malformed (e.g. "[object Object]" from stale state)
+    if (typeof apiBase !== 'string' || (!apiBase.startsWith('http') && !apiBase.startsWith('/'))) {
+      return generateTitle(content);
+    }
+
+    // Can't call direct API without a key — skip early
+    if (!apiKey && apiBase !== '/api/chat') {
+      return generateTitle(content);
+    }
+
     const cleaned = content.replace(/[#*`~>\-\[\]()]+/g, '').trim();
     const prompt = cleaned.slice(0, 200);
 
-    const resp = await fetch('/api/chat', {
+    // If using deepseek proxy without a direct key, use /api/chat
+    const url = (!apiKey && apiBase === '/api/chat')
+      ? '/api/chat'
+      : `${apiBase}/chat/completions`;
+
+    const headers = buildTitleHeaders(apiKey, authType);
+
+    const resp = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         messages: [
           {

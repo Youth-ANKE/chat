@@ -21,6 +21,7 @@ export async function extractTextFromImage(
   model: string,
   apiBase?: string,
   apiKey?: string,
+  authType: 'bearer' | 'api-key' = 'bearer',
 ): Promise<OCRResult> {
   const body = JSON.stringify({
     model,
@@ -41,12 +42,24 @@ export async function extractTextFromImage(
     temperature: 0,
   });
 
-  const response = await fetch(apiBase ?? '/api/chat', {
+  const endpoint = (apiBase && apiBase !== '/api/chat')
+    ? `${apiBase}/chat/completions`
+    : (apiBase ?? '/api/chat');
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (apiKey) {
+    if (authType === 'api-key') {
+      headers['api-key'] = apiKey;
+    } else {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+  }
+
+  const response = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-    },
+    headers,
     body,
   });
 

@@ -4,6 +4,19 @@ import type { ModelProvider, ProviderModel } from '../types';
 import { useProviderStore } from '../stores/providerStore';
 import { testProviderConnection, fetchProviderModels } from '../lib/provider-test';
 
+/** Friendly label for provider type */
+function providerTypeLabel(type: string): string {
+  const map: Record<string, string> = {
+    deepseek: 'DeepSeek',
+    openai: 'OpenAI',
+    anthropic: 'Anthropic',
+    ollama: 'Ollama',
+    mimo: 'MiMo',
+    custom: '自定义',
+  };
+  return map[type] ?? type;
+}
+
 /** Detect if running inside Electron */
 const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI?.isElectron;
 
@@ -95,8 +108,8 @@ export function ProviderManager({ darkMode }: ProviderManagerProps) {
     if (toSave.length === 0) return;
     setModels(providerId, toSave);
     // Clear fetched state
-    setFetchedModels((p) => { const n = { ...p }; delete n[provider.id]; return n; });
-    setSelectedModelIds((p) => { const n = { ...p }; delete n[provider.id]; return n; });
+    setFetchedModels((p) => { const n = { ...p }; delete n[providerId]; return n; });
+    setSelectedModelIds((p) => { const n = { ...p }; delete n[providerId]; return n; });
   };
 
   const inputClass = `w-full px-3 py-2 rounded-lg text-xs outline-none transition-all ${
@@ -129,7 +142,7 @@ export function ProviderManager({ darkMode }: ProviderManagerProps) {
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
                   darkMode ? 'bg-white/[0.04] text-gray-500' : 'bg-gray-100 text-gray-500'
                 }`}>
-                  {provider.type}
+                  {providerTypeLabel(provider.type)}
                 </span>
               </div>
               <button

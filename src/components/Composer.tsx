@@ -161,7 +161,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             // Try OCR on the image
             setOcrPending(true);
             try {
-              const result = await extractTextFromImage(dataUri, model ?? DEFAULT_DEEPSEEK_MODEL);
+              const providers = useProviderStore.getState().providers;
+              const info = getModelById(model ?? DEFAULT_DEEPSEEK_MODEL, providers);
+              const result = await extractTextFromImage(
+                dataUri,
+                model ?? DEFAULT_DEEPSEEK_MODEL,
+                info?.provider.baseUrl,
+                info?.provider.apiKey,
+                info?.provider.authType ?? 'bearer',
+              );
               if (result.hasText) {
                 setPendingFiles((prev) => [
                   ...prev,
@@ -615,7 +623,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               )}
               <span className={`text-[11px] ${
                 darkMode ? 'text-white/10' : 'text-gray-400'
-              }`}>DeepSeek V4</span>
+              }`}>{getModelLabel(model ?? DEFAULT_DEEPSEEK_MODEL)}</span>
             </div>
           </div>
         </div>

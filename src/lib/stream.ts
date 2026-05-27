@@ -169,6 +169,8 @@ export async function streamChat(
     apiBase?: string;
     /** Custom API key */
     apiKey?: string;
+    /** Auth header type: 'bearer' (Authorization: Bearer <key>) or 'api-key' (api-key: <key>) */
+    authType?: 'bearer' | 'api-key';
     /** Custom user-defined tools (merged with web_search if enabled) */
     customTools?: { name: string; description: string; parameters: Record<string, unknown> }[];
   },
@@ -225,10 +227,11 @@ export async function streamChat(
   const body: Record<string, unknown> = {
     messages: apiMessages,
     model: params.model ?? DEFAULT_DEEPSEEK_MODEL,
+    stream: true,
+    stream_options: { include_usage: true },
     temperature: params.temperature ?? 0.7,
     max_tokens: params.max_tokens ?? 4096,
-    thinking: params.thinking ?? false,
-    stream_options: { include_usage: true },
+    thinking: { type: params.thinking ? 'enabled' : 'disabled' },
   };
 
   if (params.topP !== undefined && params.topP < 1) {
@@ -283,10 +286,19 @@ export async function streamChat(
     if (controller.signal.aborted) break;
 
     try {
-      const apiEndpoint = params.apiBase ?? '/api/chat';
+      // Construct chat completions endpoint: proxy path stays as-is,
+      // direct provider URLs need /chat/completions appended
+      const apiBase = params.apiBase ?? '/api/chat';
+      const apiEndpoint = apiBase === '/api/chat'
+        ? '/api/chat'
+        : `${apiBase}/chat/completions`;
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (params.apiKey) {
-        headers['Authorization'] = `Bearer ${params.apiKey}`;
+        if (params.authType === 'api-key') {
+          headers['api-key'] = params.apiKey;
+        } else {
+          headers['Authorization'] = `Bearer ${params.apiKey}`;
+        }
       }
 
       const response = await fetch(apiEndpoint, {

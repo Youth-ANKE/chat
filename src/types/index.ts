@@ -243,9 +243,11 @@ export interface UserTool {
 export interface ModelProvider {
   id: string;
   name: string;
-  type: 'deepseek' | 'openai' | 'anthropic' | 'ollama' | 'custom';
+  type: 'deepseek' | 'openai' | 'anthropic' | 'ollama' | 'mimo' | 'custom';
   apiKey: string;
   baseUrl?: string;
+  /** Authentication header style. 'bearer' → Authorization: Bearer <key>; 'api-key' → api-key: <key>. Defaults to 'bearer'. */
+  authType?: 'bearer' | 'api-key';
   models: ProviderModel[];
   enabled: boolean;
 }

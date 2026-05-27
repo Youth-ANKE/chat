@@ -3,10 +3,10 @@ import { useState, useEffect } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useChatStore } from '../stores/chatStore';
 import { ACCENT_COLORS } from '../types';
-import { getAllModels } from '../lib/provider-adapter';
+import { getAllModels, getModelById } from '../lib/provider-adapter';
 import { cn } from '../lib/utils';
 import { playClick, playToggleOn, playToggleOff, playSave } from '../lib/sound';
-import { getAvailableVoices, previewVoice, AZURE_VOICES, type SpeechVoice } from '../lib/speech';
+import { getAvailableVoices, previewVoice, AZURE_VOICES, MIMO_VOICES, type SpeechVoice } from '../lib/speech';
 import { previewTrack, MUSIC_TRACKS, type MusicMode } from '../lib/music';
 import { useProviderStore } from '../stores/providerStore';
 import { ProviderManager } from './ProviderManager';
@@ -420,11 +420,13 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 <span className={cn('text-xs', darkMode ? 'text-white/50' : 'text-gray-500')}>当前模型</span>
                 <span className={cn(
                   'text-sm font-mono font-bold',
-                  session?.model === 'deepseek-v4-pro'
-                    ? darkMode ? 'text-purple-400' : 'text-purple-600'
-                    : darkMode ? 'text-cyan-400' : 'text-cyan-600'
+                  darkMode ? 'text-cyan-400' : 'text-cyan-600'
                 )}>
-                  {session?.model === 'deepseek-v4-pro' ? 'V4 Pro' : 'V4 Flash'}
+                  {(() => {
+                    const providers = useProviderStore.getState().providers;
+                    const info = getModelById(session?.model ?? settings.defaultModel, providers);
+                    return info?.model.name ?? session?.model ?? settings.defaultModel;
+                  })()}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -665,8 +667,8 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                   )}
                 >
                   <span className="truncate pr-4">
-                    {(settings.speechVoice && [...AZURE_VOICES, ...voices].find(v => v.voiceURI === settings.speechVoice))
-                      ? `${[...AZURE_VOICES, ...voices].find(v => v.voiceURI === settings.speechVoice)!.name} (${[...AZURE_VOICES, ...voices].find(v => v.voiceURI === settings.speechVoice)!.lang})`
+                    {(settings.speechVoice && [...AZURE_VOICES, ...MIMO_VOICES, ...voices].find(v => v.voiceURI === settings.speechVoice))
+                      ? `${[...AZURE_VOICES, ...MIMO_VOICES, ...voices].find(v => v.voiceURI === settings.speechVoice)!.name} (${[...AZURE_VOICES, ...MIMO_VOICES, ...voices].find(v => v.voiceURI === settings.speechVoice)!.lang})`
                       : '系统默认'}
                   </span>
                   <svg className="w-3 h-3 flex-shrink-0 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
@@ -723,6 +725,54 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                                 : darkMode ? 'text-gray-400 hover:bg-white/[0.06] hover:text-white/70' : 'text-gray-600 hover:bg-gray-50'
                             )}
                             title={`${v.name} (${v.lang}) — 点击选择，需要 Azure 语音服务`}
+                          >
+                            <span className="truncate flex-1">{v.name} ({v.lang})</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); previewVoice(v.voiceURI); }}
+                              className={cn(
+                                'flex-shrink-0 p-1 rounded transition-colors',
+                                darkMode ? 'hover:bg-white/[0.1] text-gray-500 hover:text-white/70' : 'hover:bg-gray-200 text-gray-400 hover:text-gray-600'
+                              )}
+                              title="试听此语音"
+                            >
+                              <Play className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleSpeechVoiceFavorite(v.voiceURI); playClick(); }}
+                              className={cn(
+                                'flex-shrink-0 p-1 rounded transition-colors',
+                                settings.favoriteVoices.includes(v.voiceURI)
+                                  ? 'text-yellow-400 hover:bg-white/[0.1]'
+                                  : darkMode ? 'hover:bg-white/[0.1] text-gray-600 hover:text-yellow-400' : 'hover:bg-gray-200 text-gray-300 hover:text-yellow-500'
+                              )}
+                              title={settings.favoriteVoices.includes(v.voiceURI) ? '取消收藏' : '收藏此语音'}
+                            >
+                              <Star className={cn('w-3 h-3', settings.favoriteVoices.includes(v.voiceURI) && 'fill-current')} />
+                            </button>
+                          </div>
+                        );
+                      })}
+
+                      {/* MiMo TTS 语音 */}
+                      <div className={cn(
+                        'px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider',
+                        darkMode ? 'text-orange-400/60' : 'text-orange-500'
+                      )}>
+                        🎙️ MiMo TTS 语音 (限时免费)
+                      </div>
+                      {MIMO_VOICES.map((v) => {
+                        const isActive = settings.speechVoice === v.voiceURI;
+                        return (
+                          <div
+                            key={v.voiceURI}
+                            onClick={() => { setSpeechVoice(v.voiceURI); setVoiceDropdownOpen(false); }}
+                            className={cn(
+                              'px-3 py-2 text-xs cursor-pointer truncate transition-colors flex items-center justify-between gap-1',
+                              isActive
+                                ? darkMode ? 'bg-orange-500/15 text-orange-300' : 'bg-orange-50 text-orange-600'
+                                : darkMode ? 'text-gray-400 hover:bg-white/[0.06] hover:text-white/70' : 'text-gray-600 hover:bg-gray-50'
+                            )}
+                            title={`${v.name} (${v.lang}) — 点击选择，需配置 MiMo API Key`}
                           >
                             <span className="truncate flex-1">{v.name} ({v.lang})</span>
                             <button

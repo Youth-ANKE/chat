@@ -2,6 +2,11 @@
  * Streaming Text-to-Speech using Web Speech API – no dependencies.
  * Accumulates streaming tokens, detects sentence boundaries,
  * and speaks complete sentences as they arrive.
+ *
+ * Supported backends:
+ * - Web Speech API (browser-built-in voices)
+ * - Azure Neural TTS (voice URIs prefixed with `azure://`, proxied via /api/speech)
+ * - MiMo TTS (voice URIs prefixed with `mimo://`, calls MiMo TTS API directly)
  */
 
 let textBuffer = '';
@@ -134,6 +139,13 @@ function speak(text: string) {
   const clean = stripMarkdown(text);
   if (!clean) return;
 
+  // MiMo TTS (via direct API call)
+  if (currentVoice && currentVoice.startsWith('mimo://')) {
+    const modelName = currentVoice.replace('mimo://', '');
+    speakMiMo(clean, modelName);
+    return;
+  }
+
   // Azure neural voices (via remote TTS API)
   if (currentVoice && currentVoice.startsWith('azure://')) {
     const voiceName = currentVoice.replace('azure://', '');
@@ -203,6 +215,84 @@ async function speakAzure(text: string, voiceName: string) {
   }
 }
 
+// ── MiMo TTS ──
+// Calls MiMo TTS API directly (OpenAI-compatible /v1/audio/speech).
+// API key is obtained from the MiMo provider in the provider store.
+// Default speed: 0.6 (MiMo's recommended default).
+
+/** Get the MiMo provider configuration (API key, base URL) from the provider store. */
+function getMiMoConfig(): { apiKey: string; baseUrl: string } | null {
+  // Dynamically import the provider store to avoid circular deps
+  // (speech.ts is imported by settingsStore which is imported by providerStore)
+  try {
+    const raw = localStorage.getItem('deepseek_providers_v1');
+    if (!raw) return null;
+    const providers = JSON.parse(raw) as any[];
+    const mimo = providers.find((p: any) => p.id === 'mimo');
+    if (!mimo?.apiKey) return null;
+    return {
+      apiKey: mimo.apiKey,
+      baseUrl: mimo.baseUrl || 'https://api.xiaomimimo.com/v1',
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function speakMiMo(text: string, model: string) {
+  const config = getMiMoConfig();
+  if (!config) {
+    console.warn('[speech] MiMo TTS: 未配置 MiMo API Key，请在提供商管理中设置');
+    return;
+  }
+
+  const baseUrl = config.baseUrl.replace(/\/+$/, '');
+  try {
+    const resp = await fetch(`${baseUrl}/audio/speech`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'api-key': config.apiKey,
+      },
+      body: JSON.stringify({
+        model,
+        input: text,
+        speed: 0.6,
+        response_format: 'mp3',
+      }),
+    });
+
+    if (!resp.ok) {
+      let detail = '';
+      try { detail = await resp.text(); } catch { /* ignore */ }
+      console.error(`[speech] MiMo TTS failed (${resp.status}):`, detail.slice(0, 200));
+      return;
+    }
+
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.volume = 0.9;
+    audio.playbackRate = 1.0;
+
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      audioPlayQueue = audioPlayQueue.filter((el) => el !== audio);
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      audioPlayQueue = audioPlayQueue.filter((el) => el !== audio);
+    };
+
+    audioPlayQueue.push(audio);
+    audio.play().catch((err) => {
+      console.warn('[speech] MiMo audio play failed:', err);
+    });
+  } catch (err) {
+    console.error('[speech] MiMo TTS error:', err);
+  }
+}
+
 // ── Voice preview ──
 
 /**
@@ -225,6 +315,13 @@ export function previewVoice(voiceURI?: string) {
   if (voiceURI && voiceURI.startsWith('azure://')) {
     const voiceName = voiceURI.replace('azure://', '');
     speakAzurePreview(sample, voiceName);
+    return;
+  }
+
+  // MiMo TTS voice preview
+  if (voiceURI && voiceURI.startsWith('mimo://')) {
+    const modelName = voiceURI.replace('mimo://', '');
+    speakMiMoPreview(sample, modelName);
     return;
   }
 
@@ -271,6 +368,50 @@ async function speakAzurePreview(text: string, voiceName: string) {
   }
 }
 
+/** MiMo TTS voice preview (independent of main TTS queue) */
+async function speakMiMoPreview(text: string, model: string) {
+  const config = getMiMoConfig();
+  if (!config) {
+    console.warn('[speech] MiMo TTS preview: 未配置 MiMo API Key');
+    return;
+  }
+
+  const baseUrl = config.baseUrl.replace(/\/+$/, '');
+  try {
+    const resp = await fetch(`${baseUrl}/audio/speech`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'api-key': config.apiKey,
+      },
+      body: JSON.stringify({
+        model,
+        input: text,
+        speed: 0.6,
+        response_format: 'mp3',
+      }),
+    });
+
+    if (!resp.ok) {
+      let detail = '';
+      try { detail = await resp.text(); } catch { /* ignore */ }
+      console.error(`[speech] MiMo preview failed (${resp.status}):`, detail.slice(0, 200));
+      return;
+    }
+
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.volume = 0.8;
+    audio.playbackRate = 1.0;
+    audio.onended = () => URL.revokeObjectURL(url);
+    audio.onerror = () => URL.revokeObjectURL(url);
+    audio.play().catch((err) => console.warn('[speech] MiMo preview play failed:', err));
+  } catch (err) {
+    console.error('[speech] MiMo preview error:', err);
+  }
+}
+
 // ── Voice discovery ──
 
 export interface SpeechVoice {
@@ -293,6 +434,18 @@ export const AZURE_VOICES: SpeechVoice[] = [
 ];
 
 /**
+ * MiMo TTS voices (Xiaomi MiMo API, OpenAI-compatible /audio/speech endpoint).
+ * Each voice maps to a MiMo TTS model.
+ * Requires MiMo API key configured in Provider Manager.
+ */
+export const MIMO_VOICES: SpeechVoice[] = [
+  { name: 'MiMo TTS 标准', lang: 'zh-CN', voiceURI: 'mimo://mimo-v2.5-tts' },
+  { name: 'MiMo TTS 语音克隆', lang: 'zh-CN', voiceURI: 'mimo://mimo-v2.5-tts-voiceclone' },
+  { name: 'MiMo TTS 语音设计', lang: 'zh-CN', voiceURI: 'mimo://mimo-v2.5-tts-voicedesign' },
+  { name: 'MiMo TTS V2', lang: 'zh-CN', voiceURI: 'mimo://mimo-v2-tts' },
+];
+
+/**
  * Get available voices (Chinese + English from browser, plus Azure neural voices).
  * NOTE: Chrome loads browser voices asynchronously — call this after 'voiceschanged' event.
  */
@@ -302,5 +455,5 @@ export function getAvailableVoices(): SpeechVoice[] {
     .filter((v) => v.lang.startsWith('zh') || v.lang.startsWith('en'))
     .map((v) => ({ name: v.name, lang: v.lang, voiceURI: v.voiceURI }));
 
-  return [...AZURE_VOICES, ...browserVoices];
+  return [...AZURE_VOICES, ...MIMO_VOICES, ...browserVoices];
 }

@@ -24,7 +24,7 @@ function normaliseBaseUrl(baseUrl: string): string {
   // If it already ends with /v1, keep as-is
   if (url.endsWith('/v1')) return url;
   // Auto-append /v1 for known hosts that expect it
-  const needsV1 = /api\.(openai|deepseek|anthropic|googleapis|together\.xyz|groq|fireworks|mistral)\./i.test(url);
+  const needsV1 = /api\.(openai|deepseek|anthropic|googleapis|together\.xyz|groq|fireworks|mistral|xiaomimimo)\./i.test(url);
   if (needsV1) url += '/v1';
   return url;
 }
@@ -33,10 +33,14 @@ function normaliseBaseUrl(baseUrl: string): string {
  * Build headers for an authenticated API request.
  * Falls back to no auth if key is empty (for local providers like Ollama).
  */
-function buildHeaders(apiKey?: string): Record<string, string> {
+function buildHeaders(apiKey?: string, authType?: string): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (apiKey) {
-    headers['Authorization'] = `Bearer ${apiKey}`;
+    if (authType === 'api-key') {
+      headers['api-key'] = apiKey;
+    } else {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
   }
   return headers;
 }
@@ -60,7 +64,7 @@ export async function testProviderConnection(
 
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: buildHeaders(provider.apiKey),
+      headers: buildHeaders(provider.apiKey, provider.authType),
       body: JSON.stringify({
         model: testModel,
         messages: [{ role: 'user', content: 'hi' }],
@@ -115,7 +119,7 @@ export async function fetchProviderModels(
     const timeout = setTimeout(() => controller.abort(), 20_000);
 
     const response = await fetch(`${baseUrl}/models`, {
-      headers: buildHeaders(provider.apiKey),
+      headers: buildHeaders(provider.apiKey, provider.authType),
       signal: controller.signal,
     });
 
@@ -159,7 +163,8 @@ export async function fetchProviderModels(
         idLower.includes('reasoning') ||
         idLower.includes('o1') ||
         idLower.includes('o3') ||
-        idLower.includes('deepseek-r1');
+        idLower.includes('deepseek-r1') ||
+        idLower.includes('mimo'); // MiMo models support reasoning_content
 
       merged.push({
         id: m.id,
