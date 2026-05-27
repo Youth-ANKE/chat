@@ -132,7 +132,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
             'flex items-center justify-between px-5 py-4 border-b',
             darkMode
               ? 'glass border-white/5'
-              : 'bg-white/95 backdrop-blur border-gray-200'
+              : 'backdrop-blur-[45px] saturate-[190%] brightness-[1.05] bg-white/[0.40] border border-gray-200/20'
           )}>
             <div className="flex items-center gap-2.5">
               <div className={cn(

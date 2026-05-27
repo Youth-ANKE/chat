@@ -32,8 +32,8 @@ export function ToolManager({ open, onClose }: ToolManagerProps) {
   if (!open) return null;
 
   const panelBg = darkMode
-    ? 'bg-[#0a0a1a]/98 backdrop-blur-xl border-l border-white/[0.06]'
-    : 'bg-white/95 backdrop-blur-xl border-l border-gray-200/80';
+    ? 'backdrop-blur-[50px] saturate-[200%] bg-black/[0.28] border-l border-white/[0.06]'
+    : 'backdrop-blur-[45px] saturate-[190%] brightness-[1.05] bg-white/[0.40] border-l border-gray-200/20';
   const cardBg = darkMode
     ? 'bg-white/[0.02] border border-white/[0.06]'
     : 'bg-gray-50 border border-gray-200';
@@ -87,7 +87,7 @@ export function ToolManager({ open, onClose }: ToolManagerProps) {
       <div className={`relative w-[420px] h-full overflow-y-auto custom-scrollbar shadow-2xl animate-slide-in-right ${panelBg}`}>
         {/* Header */}
         <div className={`sticky top-0 z-10 flex items-center justify-between px-5 py-4 border-b ${
-          darkMode ? 'border-white/[0.06] bg-[#0a0a1a]/98' : 'border-gray-200/80 bg-white/95'
+          darkMode ? 'border-white/[0.06] backdrop-blur-[40px] saturate-[200%] bg-white/[0.03]' : 'border-gray-200/80 bg-white/80 backdrop-blur-xl'
         }`}>
           <div className="flex items-center gap-2.5">
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${

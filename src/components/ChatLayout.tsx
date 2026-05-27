@@ -31,7 +31,7 @@ import { createMessage, generateTitle, generateAITitle } from '../lib/session';
 import { streamChat } from '../lib/stream';
 import { Settings, Menu, Trash2, Download, Zap, BarChart3, Headphones, Music, Share2, Database, Search, FileJson, HelpCircle, Info, Bot, CalendarClock, GitCompare, Image as ImageIcon, Wrench, Keyboard } from 'lucide-react';
 import type { ModelName, ChatMessage, ConversationTemplate } from '../types';
-import { DEFAULT_SHORTCUTS } from '../types';
+import { DEFAULT_SHORTCUTS, DEFAULT_DEEPSEEK_MODEL } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
 import { playClick, playToggleOn, playToggleOff, playSend, playStop, playDelete, playExport, playRegenerate } from '../lib/sound';
 import { speakChunk, flushSpeech, stopSpeech } from '../lib/speech';
@@ -144,7 +144,7 @@ export function ChatLayout() {
             createdAt: new Date().toISOString(),
             status: 'done' as const,
           })),
-          model: (data.m || 'deepseek-v4-flash') as ModelName,
+          model: (data.m || DEFAULT_DEEPSEEK_MODEL) as ModelName,
           thinking: true,
           temperature: 0.7,
           topP: 1.0,
@@ -301,6 +301,7 @@ export function ChatLayout() {
   const handleSend = useCallback(
     async (content: string, attachments?: { type: 'image' | 'text'; mimeType: string; data: string; name: string }[]) => {
       if (!activeId || isStreaming) return;
+      if (!navigator.onLine) { toast('当前离线，请检查网络连接', 'warning'); return; }
       playSend();
       const currentSession = useChatStore.getState().sessions.find((s) => s.id === activeId);
       if (!currentSession) return;
@@ -382,6 +383,7 @@ export function ChatLayout() {
 
   const handleRegenerate = useCallback(async () => {
     if (!activeId || isStreaming) return;
+    if (!navigator.onLine) { toast('当前离线，请检查网络连接', 'warning'); return; }
     playRegenerate();
     const currentSession = useChatStore.getState().sessions.find((s) => s.id === activeId);
     if (!currentSession) return;
@@ -390,21 +392,19 @@ export function ChatLayout() {
     const lastUserIdx = [...msgs].reverse().findIndex((m) => m.role === 'user');
     if (lastUserIdx === -1) return;
     const removeIdx = msgs.length - lastUserIdx;
+    if (removeIdx <= 0 || removeIdx > msgs.length) return;
 
-    clearMessages(activeId);
-    const keepMsgs = msgs.slice(0, removeIdx);
-    for (const m of keepMsgs) {
-      addMessage(activeId, m);
-    }
-
+    const keepMsgs = msgs.slice(0, removeIdx - 1);
     const lastUser = msgs[removeIdx - 1];
-    if (!lastUser) return;
     const userMsg = createMessage('user', lastUser.content, 'done');
-    addMessage(activeId, userMsg);
+    if (lastUser.replyTo) userMsg.replyTo = lastUser.replyTo;
+    if (lastUser.attachments) userMsg.attachments = lastUser.attachments;
     const assistantMsg = createMessage('assistant', '', 'streaming');
-    addMessage(activeId, assistantMsg);
 
-    const streamMessages = [...keepMsgs.slice(0, -1), userMsg].map((m) => ({
+    // Single batch write instead of clear + N × addMessage
+    setMessages(activeId, [...keepMsgs, userMsg, assistantMsg]);
+
+    const streamMessages = [...keepMsgs, userMsg].map((m) => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
       attachments: m.attachments?.map((a) => ({
@@ -416,7 +416,7 @@ export function ChatLayout() {
     }));
 
     await doStream(activeId, streamMessages, assistantMsg.id);
-  }, [activeId, isStreaming, addMessage, updateMessage, clearMessages, doStream]);
+  }, [activeId, isStreaming, setMessages, doStream, toast]);
 
   const handleStop = useCallback(() => {
     playStop();
@@ -665,9 +665,14 @@ export function ChatLayout() {
   }, [activeId, session, handleExport, handleClear, messageSearch, newSession]);
 
   return (
-    <div className={`flex h-full ${darkMode ? 'bg-space-dark text-gray-100' : 'bg-chat text-gray-900'}`}>
+    <div className={`flex h-full ${darkMode ? 'ambient-glass-bg text-gray-100' : 'ambient-glass-bg-light text-gray-900'}`}>
       {/* Tech background particles */}
       <TechBackground dark={darkMode} />
+
+      {/* Offline banner — fixed overlay at the top */}
+      <div className="fixed top-0 left-0 right-0 z-[100]">
+        <OfflineBanner isOnline={isOnline} />
+      </div>
 
       {/* Sidebar */}
       <Sidebar
@@ -681,17 +686,17 @@ export function ChatLayout() {
       {/* Main chat area */}
       <div className={`flex-1 flex flex-col min-w-0 relative ${darkMode ? 'scanline-overlay' : ''}`}>
         {/* Top bar */}
-        <header className={`flex items-center justify-between px-4 py-2.5 border-b z-10 ${
+        <header className={`flex items-center justify-between px-5 py-2 relative ${
           darkMode
-            ? 'glass border-white/5'
-            : 'glass-light border-gray-200/60'
+            ? 'backdrop-blur-[48px] saturate-[200%] brightness-[1.04] bg-white/[0.03] border-b border-white/[0.06]'
+            : 'glass-light-thin border-b border-gray-200/20'
         }`}>
           <div className="flex items-center gap-2.5 min-w-0">
             {sidebarCollapsed && (
               <button
                 onClick={() => { playClick(); setSidebarCollapsed(false); }}
-                className={`p-1 rounded-lg transition-colors ${
-                  darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-cyan-400' : 'hover:bg-gray-200/60 text-gray-400'
+                className={`p-1.5 rounded-xl transition-all duration-200 apple-btn ${
+                  darkMode ? 'hover:bg-white/[0.06] text-white/25 hover:text-white/60' : 'hover:bg-gray-200/60 text-gray-400'
                 }`}
                 title="展开侧栏 (Ctrl+B)"
               >
@@ -699,8 +704,14 @@ export function ChatLayout() {
               </button>
             )}
             <div className="flex items-center gap-2">
-              <div className={`w-1.5 h-1.5 rounded-full shadow-[0_0_6px_rgba(0,229,255,0.6)] ${isStreaming ? 'bg-cyan-400 animate-pulse' : 'bg-emerald-400'}`} />
-              <h2 className={`text-sm font-semibold truncate max-w-[200px] ${darkMode ? 'text-white/80' : 'text-gray-700'}`}>
+              <div className={`w-2 h-2 rounded-full ${
+                isStreaming
+                  ? darkMode ? 'bg-white/50 shadow-[0_0_6px_rgba(255,255,255,0.2)] animate-pulse' : 'bg-indigo-400 shadow-[0_0_6px_rgba(99,102,241,0.3)] animate-pulse'
+                  : darkMode ? 'bg-white/40 shadow-[0_0_4px_rgba(255,255,255,0.1)]' : 'bg-emerald-400 shadow-[0_0_4px_rgba(0,200,100,0.2)]'
+              }`} />
+              <h2 className={`text-sm font-semibold truncate max-w-[200px] ${
+                darkMode ? 'text-white/70' : 'text-gray-700'
+              }`}>
                 {session?.title ?? '新对话'}
               </h2>
             </div>
@@ -723,12 +734,12 @@ export function ChatLayout() {
             )}
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             {/* Template selector */}
             <button
               onClick={() => { playClick(); setTemplateSelectorOpen(true); }}
-              className={`p-1.5 rounded-lg transition-colors ${
-                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-amber-400' : 'hover:bg-gray-100 text-gray-400'
+              className={`p-1.5 rounded-xl transition-all duration-200 apple-btn ${
+                darkMode ? 'hover:bg-white/[0.06] text-white/25 hover:text-amber-300' : 'hover:bg-gray-100 text-gray-400'
               }`}
               title="对话模板"
             >
@@ -738,10 +749,10 @@ export function ChatLayout() {
             {/* Timeline toggle */}
             <button
               onClick={() => { playClick(); setTimelineMode((v) => !v); }}
-              className={`p-1.5 rounded-lg transition-colors ${
+              className={`p-1.5 rounded-xl transition-all duration-200 apple-btn ${
                 timelineMode
-                  ? darkMode ? 'text-cyan-400 bg-cyan-500/10' : 'text-indigo-600 bg-indigo-50'
-                  : darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-cyan-400' : 'hover:bg-gray-100 text-gray-400'
+                  ? darkMode ? 'text-white/70 bg-white/[0.06]' : 'text-indigo-600 bg-indigo-50'
+                  : darkMode ? 'hover:bg-white/[0.06] text-white/25 hover:text-white/60' : 'hover:bg-gray-100 text-gray-400'
               }`}
               title={timelineMode ? '时间线视图 (已开启)' : '时间线视图'}
             >
@@ -751,8 +762,8 @@ export function ChatLayout() {
             {/* A/B comparison */}
             <button
               onClick={() => { playClick(); setComparisonOpen(true); }}
-              className={`p-1.5 rounded-lg transition-colors ${
-                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-purple-400' : 'hover:bg-gray-100 text-gray-400'
+              className={`p-1.5 rounded-xl transition-all duration-200 apple-btn ${
+                darkMode ? 'hover:bg-white/[0.06] text-white/25 hover:text-purple-300' : 'hover:bg-gray-100 text-gray-400'
               }`}
               title="模型对比"
             >
@@ -761,8 +772,8 @@ export function ChatLayout() {
 
             {/* Token count */}
             {activeMessages.length > 0 && (
-              <span className={`hidden sm:flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-mono ${
-                darkMode ? 'text-cyan-400/50 bg-white/[0.02] border border-white/5' : 'text-gray-400 bg-gray-100'
+              <span className={`hidden sm:flex items-center gap-1 px-2 py-1 rounded-xl text-[10px] font-mono ${
+                darkMode ? 'text-white/20 bg-white/[0.02] border border-white/[0.03]' : 'text-gray-400 bg-gray-100'
               }`}>
                 ≈{totalTokens.toLocaleString()} tokens
               </span>
@@ -770,8 +781,8 @@ export function ChatLayout() {
             {activeMessages.length >= 2 && !isStreaming && (
               <button
                 onClick={handleRegenerate}
-                className={`px-2 py-1 rounded-lg text-xs transition-colors ${
-                  darkMode ? 'text-gray-400 hover:text-cyan-400 hover:bg-white/5' : 'text-gray-500 hover:bg-gray-100'
+                className={`px-2 py-1 rounded-xl text-xs transition-all duration-200 apple-btn ${
+                  darkMode ? 'text-white/30 hover:text-white/70 hover:bg-white/[0.05]' : 'text-gray-500 hover:bg-gray-100'
                 }`}
                 title="重新生成"
               >
@@ -781,8 +792,8 @@ export function ChatLayout() {
             <button
               onClick={handleClear}
               disabled={activeMessages.length === 0}
-              className={`px-2 py-1 rounded-lg text-xs transition-colors disabled:opacity-30 ${
-                darkMode ? 'text-gray-400 hover:text-red-400 hover:bg-white/5' : 'text-gray-500 hover:bg-gray-100 hover:text-red-500'
+              className={`px-2 py-1 rounded-xl text-xs transition-all duration-200 apple-btn disabled:opacity-20 ${
+                darkMode ? 'text-white/30 hover:text-red-400 hover:bg-white/[0.05]' : 'text-gray-500 hover:bg-gray-100 hover:text-red-500'
               }`}
               title="清空对话 (Ctrl+K)"
             >
@@ -791,8 +802,8 @@ export function ChatLayout() {
             {/* Global search */}
             <button
               onClick={() => { playClick(); setGlobalSearchOpen(true); }}
-              className={`p-1.5 rounded-lg transition-colors ${
-                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-amber-400' : 'hover:bg-gray-100 text-gray-400'
+              className={`p-1.5 rounded-xl transition-all duration-200 apple-btn ${
+                darkMode ? 'hover:bg-white/[0.06] text-white/25 hover:text-amber-300' : 'hover:bg-gray-100 text-gray-400'
               }`}
               title="全局搜索 (Ctrl+Shift+F)"
             >
@@ -801,8 +812,8 @@ export function ChatLayout() {
             <button
               onClick={() => handleExport('md')}
               disabled={activeMessages.length === 0}
-              className={`px-2 py-1 rounded-lg text-xs transition-colors disabled:opacity-30 ${
-                darkMode ? 'text-gray-400 hover:text-cyan-400 hover:bg-white/5' : 'text-gray-500 hover:bg-gray-100'
+              className={`px-2 py-1 rounded-xl text-xs transition-all duration-200 apple-btn disabled:opacity-20 ${
+                darkMode ? 'text-white/30 hover:text-white/70 hover:bg-white/[0.05]' : 'text-gray-500 hover:bg-gray-100'
               }`}
               title="导出 Markdown (Ctrl+Shift+E)"
             >
@@ -811,8 +822,8 @@ export function ChatLayout() {
             <button
               onClick={() => handleExport('json')}
               disabled={activeMessages.length === 0}
-              className={`px-2 py-1 rounded-lg text-xs transition-colors disabled:opacity-30 ${
-                darkMode ? 'text-gray-400 hover:text-emerald-400 hover:bg-white/5' : 'text-gray-500 hover:bg-gray-100'
+              className={`px-2 py-1 rounded-xl text-xs transition-all duration-200 apple-btn disabled:opacity-20 ${
+                darkMode ? 'text-white/30 hover:text-emerald-400 hover:bg-white/[0.05]' : 'text-gray-500 hover:bg-gray-100'
               }`}
               title="导出 JSON"
             >
@@ -821,8 +832,8 @@ export function ChatLayout() {
             <button
               onClick={() => handleExportImage('png')}
               disabled={activeMessages.length === 0}
-              className={`px-2 py-1 rounded-lg text-xs transition-colors disabled:opacity-30 ${
-                darkMode ? 'text-gray-400 hover:text-amber-400 hover:bg-white/5' : 'text-gray-500 hover:bg-gray-100'
+              className={`px-2 py-1 rounded-xl text-xs transition-all duration-200 apple-btn disabled:opacity-20 ${
+                darkMode ? 'text-white/30 hover:text-amber-300 hover:bg-white/[0.05]' : 'text-gray-500 hover:bg-gray-100'
               }`}
               title="导出为图片"
             >
@@ -831,8 +842,8 @@ export function ChatLayout() {
             <button
               onClick={handleShare}
               disabled={activeMessages.length === 0}
-              className={`px-2 py-1 rounded-lg text-xs transition-colors disabled:opacity-30 ${
-                darkMode ? 'text-gray-400 hover:text-purple-400 hover:bg-white/5' : 'text-gray-500 hover:bg-gray-100'
+              className={`px-2 py-1 rounded-xl text-xs transition-all duration-200 apple-btn disabled:opacity-20 ${
+                darkMode ? 'text-white/30 hover:text-purple-300 hover:bg-white/[0.05]' : 'text-gray-500 hover:bg-gray-100'
               }`}
               title={t('share.title')}
             >
@@ -840,8 +851,8 @@ export function ChatLayout() {
             </button>
             <button
               onClick={() => { playClick(); setKnowledgeOpen(true); }}
-              className={`p-1.5 rounded-lg transition-colors ${
-                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-cyan-400' : 'hover:bg-gray-100 text-gray-400'
+              className={`p-1.5 rounded-xl transition-all duration-200 apple-btn ${
+                darkMode ? 'hover:bg-white/[0.06] text-white/25 hover:text-white/60' : 'hover:bg-gray-100 text-gray-400'
               }`}
               title={t('knowledge.knowledgeBase')}
             >
@@ -849,8 +860,8 @@ export function ChatLayout() {
             </button>
             <button
               onClick={() => { playClick(); setUsageOpen(true); }}
-              className={`p-1.5 rounded-lg transition-colors ${
-                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-emerald-400' : 'hover:bg-gray-100 text-gray-400'
+              className={`p-1.5 rounded-xl transition-all duration-200 apple-btn ${
+                darkMode ? 'hover:bg-white/[0.06] text-white/25 hover:text-emerald-300' : 'hover:bg-gray-100 text-gray-400'
               }`}
               title="用量统计"
             >
@@ -861,10 +872,10 @@ export function ChatLayout() {
                 toggleSpeechEnabled();
                 playClick();
               }}
-              className={`p-1.5 rounded-lg transition-colors ${
+              className={`p-1.5 rounded-xl transition-all duration-200 apple-btn ${
                 speechEnabled
-                  ? darkMode ? 'text-purple-400 bg-purple-500/10 hover:bg-purple-500/15' : 'text-purple-600 bg-purple-50 hover:bg-purple-100'
-                  : darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-gray-300' : 'hover:bg-gray-100 text-gray-400'
+                  ? darkMode ? 'text-white/60 bg-white/[0.06] hover:bg-white/[0.1]' : 'text-purple-600 bg-purple-50 hover:bg-purple-100'
+                  : darkMode ? 'hover:bg-white/[0.06] text-white/25 hover:text-white/50' : 'hover:bg-gray-100 text-gray-400'
               }`}
               title={speechEnabled ? '关闭朗读' : '开启朗读'}
             >
@@ -875,10 +886,10 @@ export function ChatLayout() {
                 toggleMusicEnabled();
                 playClick();
               }}
-              className={`p-1.5 rounded-lg transition-colors ${
+              className={`p-1.5 rounded-xl transition-all duration-200 apple-btn ${
                 musicEnabled
-                  ? darkMode ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15' : 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
-                  : darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-gray-300' : 'hover:bg-gray-100 text-gray-400'
+                  ? darkMode ? 'text-white/60 bg-white/[0.06] hover:bg-white/[0.1]' : 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
+                  : darkMode ? 'hover:bg-white/[0.06] text-white/25 hover:text-white/50' : 'hover:bg-gray-100 text-gray-400'
               }`}
               title={musicEnabled ? '关闭背景音乐' : '开启背景音乐'}
             >
@@ -886,8 +897,8 @@ export function ChatLayout() {
             </button>
             <button
               onClick={() => { playClick(); setAboutOpen(true); }}
-              className={`p-1.5 rounded-lg transition-colors ${
-                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-purple-400' : 'hover:bg-gray-100 text-gray-400'
+              className={`p-1.5 rounded-xl transition-all duration-200 apple-btn ${
+                darkMode ? 'hover:bg-white/[0.06] text-white/25 hover:text-purple-300' : 'hover:bg-gray-100 text-gray-400'
               }`}
               title="关于"
             >
@@ -895,8 +906,8 @@ export function ChatLayout() {
             </button>
             <button
               onClick={() => { playClick(); setShortcutOpen(true); }}
-              className={`p-1.5 rounded-lg transition-colors ${
-                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-cyan-400' : 'hover:bg-gray-100 text-gray-400'
+              className={`p-1.5 rounded-xl transition-all duration-200 apple-btn ${
+                darkMode ? 'hover:bg-white/[0.06] text-white/25 hover:text-white/60' : 'hover:bg-gray-100 text-gray-400'
               }`}
               title="帮助 (Ctrl+/)"
             >
@@ -904,8 +915,8 @@ export function ChatLayout() {
             </button>
             <button
               onClick={() => { playClick(); setToolsOpen(true); }}
-              className={`p-1.5 rounded-lg transition-colors ${
-                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-amber-400' : 'hover:bg-gray-100 text-gray-400'
+              className={`p-1.5 rounded-xl transition-all duration-200 apple-btn ${
+                darkMode ? 'hover:bg-white/[0.06] text-white/25 hover:text-amber-300' : 'hover:bg-gray-100 text-gray-400'
               }`}
               title="工具管理"
             >
@@ -913,8 +924,8 @@ export function ChatLayout() {
             </button>
             <button
               onClick={() => { playClick(); setShortcutEditorOpen(true); }}
-              className={`p-1.5 rounded-lg transition-colors ${
-                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-amber-400' : 'hover:bg-gray-100 text-gray-400'
+              className={`p-1.5 rounded-xl transition-all duration-200 apple-btn ${
+                darkMode ? 'hover:bg-white/[0.06] text-white/25 hover:text-amber-300' : 'hover:bg-gray-100 text-gray-400'
               }`}
               title="自定义快捷键"
             >
@@ -922,8 +933,8 @@ export function ChatLayout() {
             </button>
             <button
               onClick={() => { playClick(); setSettingsOpen(true); }}
-              className={`p-1.5 rounded-lg transition-colors ${
-                darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-purple-400' : 'hover:bg-gray-100 text-gray-400'
+              className={`p-1.5 rounded-xl transition-all duration-200 apple-btn ${
+                darkMode ? 'hover:bg-white/[0.06] text-white/25 hover:text-purple-300' : 'hover:bg-gray-100 text-gray-400'
               }`}
               title="设置"
             >
@@ -943,17 +954,17 @@ export function ChatLayout() {
         {/* Messages */}
         {/* Message search bar */}
         {messageSearch !== undefined && (
-          <div className={`px-4 py-2 z-10 ${darkMode ? 'bg-black/20 border-b border-white/[0.04]' : 'bg-gray-50/50 border-b border-gray-200'}`}>
+          <div className={`px-4 py-2 z-10 ${darkMode ? 'backdrop-blur-[40px] saturate-[200%] brightness-[1.03] bg-white/[0.02] border-b border-white/[0.05]' : 'backdrop-blur-[40px] saturate-[190%] brightness-[1.04] bg-white/[0.30] border-b border-gray-200/20'}`}>
             <div className="max-w-3xl mx-auto">
               <input
                 data-search-input
                 value={messageSearch}
                 onChange={(e) => setMessageSearch(e.target.value)}
                 placeholder="搜索对话内容… (Ctrl+F)"
-                className={`w-full px-3 py-1.5 rounded-lg text-xs outline-none transition-all ${
+                className={`w-full px-3 py-1.5 rounded-xl text-xs outline-none transition-all duration-200 ${
                   darkMode
-                    ? 'bg-white/[0.04] border border-white/[0.06] focus:border-cyan-500/30 text-white/70 placeholder-gray-600'
-                    : 'bg-white border border-gray-200 focus:border-indigo-300 text-gray-700 placeholder-gray-400'
+                    ? 'bg-white/[0.03] border border-white/[0.05] focus:border-white/[0.12] focus:bg-white/[0.05] text-white/60 placeholder-white/20'
+                    : 'bg-white border border-gray-200 focus:border-gray-300 text-gray-700 placeholder-gray-400'
                 }`}
               />
             </div>
@@ -1067,7 +1078,17 @@ export function ChatLayout() {
 
       {/* Knowledge base panel */}
       {knowledgeOpen && (
-        <KnowledgeBasePanel onClose={() => setKnowledgeOpen(false)} />
+        <KnowledgeBasePanel
+          onClose={() => setKnowledgeOpen(false)}
+          onInjectToChat={(context) => {
+            if (!activeId) return;
+            const currentSession = useChatStore.getState().sessions.find((s) => s.id === activeId);
+            const existingPrompt = currentSession?.systemPrompt ?? '';
+            const sep = existingPrompt ? '\n\n---\n\n' : '';
+            const newPrompt = `${existingPrompt}${sep}以下是与当前对话相关的知识库内容，请优先参考这些内容回答问题：\n\n${context}`;
+            useChatStore.getState().setSystemPrompt(activeId, newPrompt);
+          }}
+        />
       )}
 
       {/* Tags panel */}

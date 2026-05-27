@@ -32,14 +32,14 @@ export function GlobalSearch({ onClose, onNavigate }: GlobalSearchProps) {
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       <div
-        className={`relative w-full max-w-2xl rounded-2xl shadow-2xl border overflow-hidden ${
+        className={`relative w-full max-w-2xl rounded-2xl border overflow-hidden ${
           darkMode
-            ? 'bg-[#0a0f1a] border-white/[0.08]'
-            : 'bg-white border-gray-200'
+            ? 'backdrop-blur-[50px] saturate-[200%] bg-black/[0.28] border-white/[0.08] shadow-[0_8px_50px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.06)]'
+            : 'bg-white border-gray-200 shadow-2xl'
         }`}
       >
         {/* Search input */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.06]">
+        <div className={`flex items-center gap-3 px-4 py-3 border-b backdrop-blur-[30px] saturate-[180%] ${darkMode ? 'border-white/[0.06] bg-white/[0.02]' : 'border-gray-100 bg-white/80'}`}>
           <Search className={`w-4 h-4 ${darkMode ? 'text-cyan-400/60' : 'text-indigo-400'}`} />
           <input
             autoFocus

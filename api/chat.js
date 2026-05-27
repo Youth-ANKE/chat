@@ -1,3 +1,5 @@
+import { getValidModel, DEFAULT_MODEL } from './model-validation.js';
+
 export const config = {
   maxDuration: 60,
 };
@@ -13,7 +15,7 @@ export default async function handler(req, res) {
 
   const {
     messages,
-    model = 'deepseek-v4-flash',
+    model = DEFAULT_MODEL,
     temperature = 0.7,
     max_tokens = 4096,
     thinking = false,
@@ -26,9 +28,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'messages is required' });
   }
 
-  // Validate model name
-  const validModels = ['deepseek-v4-flash', 'deepseek-v4-pro'];
-  const selectedModel = validModels.includes(model) ? model : 'deepseek-v4-flash';
+  const selectedModel = getValidModel(model);
 
   // Clamp parameters
   const safeTemperature = Math.min(Math.max(Number(temperature) || 0.7, 0), 2);

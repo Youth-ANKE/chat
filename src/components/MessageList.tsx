@@ -41,6 +41,7 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
 function MessageList({ messages, onSend, editingMsgId, onEdit, onStartEdit, onCancelEdit, searchQuery, sessionId, sessionTitle, onPreviewCode, onBranch, onReply, timelineMode }, ref) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
   const darkMode = useSettingsStore((s) => s.settings.darkMode);
 
   // Expose scroll control methods to parent
@@ -72,8 +73,28 @@ function MessageList({ messages, onSend, editingMsgId, onEdit, onStartEdit, onCa
   }, [messages, searchQuery]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Only auto-scroll if user hasn't manually scrolled up
+    if (!userScrolledUpRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [filteredMessages]);
+
+  // Detect user scroll-up to suppress auto-scroll during streaming
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+      userScrolledUpRef.current = !nearBottom;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Reset scroll lock when messages are empty (new session)
+  useEffect(() => {
+    if (messages.length === 0) userScrolledUpRef.current = false;
+  }, [messages.length]);
 
   if (messages.length === 0) {
     return (
@@ -89,31 +110,34 @@ function MessageList({ messages, onSend, editingMsgId, onEdit, onStartEdit, onCa
         )}
 
         <div className="text-center max-w-2xl w-full animate-fade-in-up px-4 py-12">
-          {/* Logo with glow effect */}
+          {/* Logo with subtle glow */}
           <div className="mb-10">
             <div className="relative inline-flex mb-6">
-              {/* Glow ring */}
+              {/* Subtle halo */}
               {darkMode && (
-                <div className="absolute -inset-4 rounded-full opacity-30">
-                  <div className="absolute inset-0 rounded-full blur-xl bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400" style={{ animation: 'spin 8s linear infinite' }} />
+                <div className="absolute -inset-6 rounded-full opacity-15">
+                  <div className="absolute inset-0 rounded-full blur-2xl bg-gradient-to-r from-white/20 via-blue-200/10 to-purple-200/10" style={{ animation: 'spin 12s linear infinite' }} />
                 </div>
               )}
-              <div className={`relative w-20 h-20 rounded-2xl flex items-center justify-center ${
+              <div className={`relative w-20 h-20 rounded-[22px] flex items-center justify-center overflow-hidden ${
                 darkMode
-                  ? 'gradient-cyber shadow-[0_0_40px_rgba(0,229,255,0.25),0_0_80px_rgba(179,102,255,0.1)]'
-                  : 'bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 shadow-xl shadow-indigo-500/25'
+                  ? 'bg-white/[0.06] backdrop-blur-md border border-white/[0.08] shadow-[0_0_60px_rgba(200,220,255,0.08),0_0_120px_rgba(200,220,255,0.04)]'
+                  : 'bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 shadow-xl shadow-indigo-500/15'
               }`}>
-                <Sparkles className="w-9 h-9 text-white" />
+                <Sparkles className={`w-9 h-9 ${darkMode ? 'text-white/70' : 'text-white'}`} />
+                {darkMode && (
+                  <div className="absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.06] to-transparent pointer-events-none" />
+                )}
               </div>
             </div>
 
             {/* Title */}
             <h1 className="text-4xl font-bold tracking-tight mb-3">
-              <span className={darkMode ? 'text-white/95' : 'text-gray-900'}>DeepSeek</span>
+              <span className={darkMode ? 'text-white/90' : 'text-gray-900'}>DeepSeek</span>
               {' '}
               <span className={`text-transparent bg-clip-text ${
                 darkMode
-                  ? 'bg-gradient-to-r from-cyan-300 via-blue-400 to-purple-400'
+                  ? 'bg-gradient-to-r from-white/50 via-blue-200 to-purple-200'
                   : 'bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500'
               }`}>
                 Chatbox
@@ -122,7 +146,7 @@ function MessageList({ messages, onSend, editingMsgId, onEdit, onStartEdit, onCa
 
             {/* Subtitle */}
             <p className={`text-sm max-w-md mx-auto leading-relaxed mb-5 ${
-              darkMode ? 'text-gray-500' : 'text-gray-400'
+              darkMode ? 'text-white/25' : 'text-gray-400'
             }`}>
               新一代 AI 对话终端 · 流式输出 · 深度推理 · 代码着色 · LaTeX 公式
             </p>
@@ -130,36 +154,21 @@ function MessageList({ messages, onSend, editingMsgId, onEdit, onStartEdit, onCa
             {/* Feature badges */}
             <div className="flex items-center justify-center gap-2.5 flex-wrap">
               {[
-                { icon: Cpu, label: 'DeepSeek V4', color: 'cyan' },
-                { icon: Zap, label: 'Flash', color: 'emerald' },
-                { icon: Brain, label: '深度思考', color: 'purple' },
-                { icon: Code2, label: 'Code Highlight', color: 'blue' },
-                { icon: Globe, label: 'SSE Stream', color: 'indigo' },
+                { icon: Cpu, label: 'DeepSeek V4' },
+                { icon: Zap, label: 'Flash' },
+                { icon: Brain, label: '深度思考' },
+                { icon: Code2, label: 'Code Highlight' },
+                { icon: Globe, label: 'SSE Stream' },
               ].map((item) => (
                 <div
                   key={item.label}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all duration-200 ${
                     darkMode
-                      ? `bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.12] text-gray-400 hover:text-white/70`
+                      ? `glass-pill text-white/30 hover:text-white/50 hover:border-white/[0.1] cursor-default`
                       : 'bg-white border border-gray-200 shadow-sm text-gray-500'
                   }`}
-                  style={darkMode ? ({
-                    '--hover-glow': item.color === 'cyan'
-                      ? 'rgba(0,229,255,0.15)'
-                      : item.color === 'purple'
-                        ? 'rgba(179,102,255,0.15)'
-                        : item.color === 'emerald'
-                          ? 'rgba(0,255,136,0.15)'
-                          : 'rgba(68,136,255,0.15)',
-                  }) as React.CSSProperties : undefined}
                 >
-                  <item.icon className={`w-3 h-3 ${darkMode && (
-                    item.color === 'cyan' ? 'text-cyan-400/60' :
-                    item.color === 'purple' ? 'text-purple-400/60' :
-                    item.color === 'emerald' ? 'text-emerald-400/60' :
-                    item.color === 'blue' ? 'text-blue-400/60' :
-                    'text-indigo-400/60'
-                  )}`} />
+                  <item.icon className={`w-3 h-3 ${darkMode ? 'text-white/25' : ''}`} />
                   {item.label}
                 </div>
               ))}
@@ -167,40 +176,40 @@ function MessageList({ messages, onSend, editingMsgId, onEdit, onStartEdit, onCa
           </div>
 
           {/* Divider */}
-          <div className={`flex items-center gap-3 my-8 ${darkMode ? '' : ''}`}>
-            <div className={`flex-1 h-px ${darkMode ? 'bg-white/[0.05]' : 'bg-gray-200'}`} />
-            <span className={`text-[10px] uppercase tracking-[0.2em] ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+          <div className={`flex items-center gap-3 my-8`}>
+            <div className={`flex-1 h-px ${darkMode ? 'bg-white/[0.04]' : 'bg-gray-200'}`} />
+            <span className={`text-[10px] uppercase tracking-[0.2em] ${darkMode ? 'text-white/15' : 'text-gray-400'}`}>
               快速开始
             </span>
-            <div className={`flex-1 h-px ${darkMode ? 'bg-white/[0.05]' : 'bg-gray-200'}`} />
+            <div className={`flex-1 h-px ${darkMode ? 'bg-white/[0.04]' : 'bg-gray-200'}`} />
           </div>
 
           {/* Quick suggestions grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {SUGGESTIONS.map((item) => (
               <button
                 key={item.label}
                 onClick={() => onSend?.(item.prompt)}
-                className={`group flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-left transition-all duration-200 ${
+                className={`group flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left transition-all duration-200 hover-lift ${
                   darkMode
-                    ? 'bg-white/[0.02] border border-white/[0.05] hover:border-cyan-500/25 hover:bg-cyan-500/[0.03] hover:shadow-[0_0_16px_rgba(0,229,255,0.04)]'
-                    : 'bg-white/70 border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50 shadow-sm hover:shadow-md'
+                    ? 'glass-card border-white/[0.04]'
+                    : 'bg-white/70 border border-gray-200 hover:border-gray-300 hover:bg-white shadow-sm'
                 }`}
               >
-                <span className="text-lg flex-shrink-0">{item.icon}</span>
+                <span className="text-lg flex-shrink-0 opacity-80">{item.icon}</span>
                 <div className="flex-1 min-w-0">
                   <div className={`text-[13px] font-medium transition-colors ${
                     darkMode
-                      ? 'text-white/75 group-hover:text-cyan-300'
-                      : 'text-gray-700 group-hover:text-indigo-600'
+                      ? 'text-white/65 group-hover:text-white/85'
+                      : 'text-gray-700 group-hover:text-gray-900'
                   }`}>{item.label}</div>
                   <div className={`text-[11px] mt-0.5 truncate ${
-                    darkMode ? 'text-gray-600' : 'text-gray-400'
+                    darkMode ? 'text-white/20' : 'text-gray-400'
                   }`}>{item.prompt}</div>
                 </div>
                 <ChevronRight className={`w-4 h-4 flex-shrink-0 transition-all duration-200 ${
                   darkMode
-                    ? 'opacity-0 group-hover:opacity-100 translate-x-[-4px] group-hover:translate-x-0 text-cyan-400/50'
+                    ? 'opacity-0 group-hover:opacity-100 translate-x-[-4px] group-hover:translate-x-0 text-white/20'
                     : 'opacity-0 group-hover:opacity-100 -translate-x-1 group-hover:translate-x-0 text-indigo-400'
                 }`} />
               </button>
@@ -210,10 +219,10 @@ function MessageList({ messages, onSend, editingMsgId, onEdit, onStartEdit, onCa
           {/* Status indicator */}
           <div className={`mt-10 inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs ${
             darkMode
-              ? 'bg-white/[0.02] border border-emerald-500/10 text-gray-500'
+              ? 'glass-pill text-white/25 border-white/[0.06]'
               : 'bg-white border border-gray-200 shadow-sm text-gray-400'
           }`}>
-            <div className={`w-2 h-2 rounded-full ${darkMode ? 'bg-emerald-400 shadow-[0_0_8px_rgba(0,255,136,0.5)]' : 'bg-green-500'} animate-pulse`} />
+            <div className={`w-2 h-2 rounded-full ${darkMode ? 'bg-white/40 shadow-[0_0_6px_rgba(255,255,255,0.15)]' : 'bg-green-500'} animate-pulse`} />
             DeepSeek V4 API · 在线可用
           </div>
         </div>

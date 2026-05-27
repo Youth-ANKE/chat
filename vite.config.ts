@@ -2,7 +2,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  base: process.env.ELECTRON === 'true' ? './' : '/',
   plugins: [
     react(),
     VitePWA({
@@ -33,4 +34,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

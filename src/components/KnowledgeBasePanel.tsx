@@ -1,20 +1,24 @@
 import { useState, useRef } from 'react';
-import { X, FileUp, Trash2, Database, BookOpen, Search, Zap, FileText } from 'lucide-react';
+import { X, FileUp, Trash2, Database, BookOpen, Search, Zap, FileText, ArrowDownToLine } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useKnowledgeStore } from '../stores/knowledgeStore';
 import { useConfirm } from './ConfirmDialog';
+import { useToast } from './Toast';
 import { playClick, playDelete } from '../lib/sound';
 
 interface KnowledgeBasePanelProps {
   onClose: () => void;
+  /** Called when user wants to inject search results as chat context */
+  onInjectToChat?: (contextText: string) => void;
 }
 
-export function KnowledgeBasePanel({ onClose }: KnowledgeBasePanelProps) {
+export function KnowledgeBasePanel({ onClose, onInjectToChat }: KnowledgeBasePanelProps) {
   const { t } = useTranslation();
   const darkMode = useSettingsStore((s) => s.settings.darkMode);
   const { documents, addDocument, removeDocument, searchChunks, clearAll } = useKnowledgeStore();
   const { confirm } = useConfirm();
+  const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<string[]>([]);
@@ -44,6 +48,16 @@ export function KnowledgeBasePanel({ onClose }: KnowledgeBasePanelProps) {
     playClick();
     const results = searchChunks(searchQuery, 5);
     setSearchResults(results);
+  };
+
+  const handleInject = () => {
+    if (!onInjectToChat || searchResults.length === 0) return;
+    playClick();
+    const context = searchResults
+      .map((r, i) => `[知识库片段 ${i + 1}]\n${r}`)
+      .join('\n\n');
+    onInjectToChat(context);
+    toast('知识库内容已注入到当前对话', 'success');
   };
 
   const formatter = (num: number) => num >= 1000 ? `${(num / 1000).toFixed(1)}K` : String(num);
@@ -122,9 +136,20 @@ export function KnowledgeBasePanel({ onClose }: KnowledgeBasePanelProps) {
       {/* Search results */}
       {searchResults.length > 0 && (
         <div className="px-3 pb-2">
-          <div className={`text-[10px] font-semibold mb-1.5 ${darkMode ? 'text-cyan-400/80' : 'text-indigo-500'}`}>
-            <Zap className="w-3 h-3 inline mr-1" />
-            搜索到 {searchResults.length} 个匹配片段
+          <div className={`text-[10px] font-semibold mb-1.5 flex items-center justify-between ${darkMode ? 'text-cyan-400/80' : 'text-indigo-500'}`}>
+            <span><Zap className="w-3 h-3 inline mr-1" />搜索到 {searchResults.length} 个匹配片段</span>
+            {onInjectToChat && (
+              <button
+                onClick={handleInject}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-colors ${
+                  darkMode ? 'bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                }`}
+                title="将搜索结果注入到当前对话上下文"
+              >
+                <ArrowDownToLine className="w-3 h-3" />
+                注入对话
+              </button>
+            )}
           </div>
           <div className="space-y-1.5 max-h-[300px] overflow-y-auto custom-scrollbar">
             {searchResults.map((r, i) => (

@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback, type KeyboardEvent, type DragEvent, type ClipboardEvent } from 'react';
 import { Send, Square, Paperclip, Globe, X, Image, FileText, BookOpen, UploadCloud, Reply, ScanEye, FileSearch } from 'lucide-react';
 import type { ModelName, ChatMessage } from '../types';
+import { DEFAULT_DEEPSEEK_MODEL } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useProviderStore } from '../stores/providerStore';
 import { getModelById } from '../lib/provider-adapter';
 import { playClick, playDelete } from '../lib/sound';
+import { cn } from '../lib/utils';
 import { VoiceInputButton } from './VoiceInputButton';
 import { parseDocument, isParseableDocument } from '../lib/document-parser';
 import { extractTextFromImage } from '../lib/ocr';
@@ -159,7 +161,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             // Try OCR on the image
             setOcrPending(true);
             try {
-              const result = await extractTextFromImage(dataUri, model ?? 'deepseek-chat');
+              const result = await extractTextFromImage(dataUri, model ?? DEFAULT_DEEPSEEK_MODEL);
               if (result.hasText) {
                 setPendingFiles((prev) => [
                   ...prev,
@@ -314,12 +316,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
 
     return (
       <div
-        className={`border-t px-4 py-3 z-10 flex-shrink-0 relative transition-colors ${
+        className={`border-t px-4 pt-3 pb-4 z-10 flex-shrink-0 relative transition-colors ${
           dragOver
             ? darkMode
-              ? 'glass border-cyan-500/40 !bg-cyan-500/[0.06]'
-              : 'bg-indigo-50/80 border-indigo-400/60 backdrop-blur-md'
-            : darkMode ? 'glass border-white/5' : 'bg-white/80 border-gray-200/80 backdrop-blur-md'
+              ? 'backdrop-blur-[50px] saturate-[200%] brightness-[1.04] bg-white/[0.02] border-white/[0.06]'
+              : 'backdrop-blur-[45px] saturate-[190%] brightness-[1.05] bg-white/[0.35] border-indigo-400/40'
+            : darkMode
+              ? 'backdrop-blur-[45px] saturate-[200%] brightness-[1.04] bg-white/[0.02] border-t border-white/[0.06]'
+              : 'backdrop-blur-[45px] saturate-[190%] brightness-[1.05] bg-white/[0.30] border-t border-gray-200/20'
         }`}
         onPaste={handlePaste}
         onDragEnter={handleDragEnter}
@@ -419,17 +423,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             </div>
           )}
 
-          {/* Input area */}
-          <div className={`relative flex items-end gap-2.5 rounded-2xl px-4 py-3 transition-all duration-300 ${
+          {/* Input area — Apple liquid glass pill (strong blur + crystal) */}
+          <div className={`relative flex items-end gap-2.5 rounded-[28px] px-5 py-3.5 transition-all duration-300 ${
             darkMode
               ? isStreaming
-                ? `bg-purple-500/[0.04] border border-purple-500/25 shadow-[0_0_20px_rgba(179,102,255,0.08)]`
-                : `bg-white/[0.03] border border-white/[0.06] focus-within:border-cyan-500/35 focus-within:shadow-[0_0_24px_rgba(0,229,255,0.07)] focus-within:bg-white/[0.04]`
-              : 'bg-gray-100/80 border border-gray-200 rounded-xl focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-400/20'
+                ? `glass-crystal backdrop-blur-[50px] saturate-[200%] bg-white/[0.025] border border-white/[0.06] shadow-lg`
+                : `glass-crystal backdrop-blur-[45px] saturate-[200%] brightness-[1.05] bg-white/[0.035] border border-white/[0.06] focus-within:border-cyan-500/20 focus-within:shadow-[0_4px_40px_rgba(0,0,0,0.35),0_0_0_1px_rgba(0,180,255,0.06)] focus-within:bg-white/[0.05] shadow-sm`
+              : `glass-crystal backdrop-blur-[40px] saturate-[190%] brightness-[1.06] bg-white/[0.45] border border-gray-200/30 focus-within:border-indigo-300/60 focus-within:shadow-[0_4px_24px_rgba(99,102,241,0.08),0_0_0_1px_rgba(99,102,241,0.06)] focus-within:bg-white/[0.55] shadow-sm`
           }`}>
-            {/* Terminal prompt for dark mode */}
+            {/* Terminal prompt for dark mode — subtle */}
             {darkMode && (
-              <span className="text-emerald-400 text-sm font-mono flex-shrink-0 pb-1 select-none opacity-70">❯</span>
+              <span className="text-white/15 text-sm font-mono flex-shrink-0 pb-1 select-none">❯</span>
             )}
             <textarea
               ref={innerRef}
@@ -439,17 +443,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               onKeyDown={handleKeyDown}
               placeholder={
                 isStreaming
-                  ? '⚡ 正在生成回复…'
+                  ? '正在生成回复…'
                   : disabled
                     ? '编辑模式中…'
                   : pendingFiles.length > 0
                     ? '输入消息（可选），Enter 发送 · Shift+Enter 换行'
-                    : '输入消息，Enter 发送，Shift+Enter 换行'
+                    : '输入消息'
               }
               disabled={disabled || isStreaming}
               className={`flex-1 resize-none bg-transparent text-sm outline-none max-h-[200px] py-1 leading-relaxed ${
                 darkMode
-                  ? 'text-white/85 placeholder-gray-600'
+                  ? 'text-white/80 placeholder-white/20'
                   : 'text-gray-800 placeholder-gray-400'
               }`}
             />
@@ -465,7 +469,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             />
 
             {/* Action buttons */}
-            <div className="flex items-center gap-1 flex-shrink-0">
+            <div className="flex items-center gap-0.5 flex-shrink-0">
               {/* Voice input */}
               <VoiceInputButton
                 onText={(text) => {
@@ -482,10 +486,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               <button
                 onClick={() => { playClick(); onOpenPromptLibrary?.(); }}
                 disabled={isStreaming || disabled}
-                className={`p-2 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+                className={`p-2 rounded-xl transition-all duration-200 apple-btn disabled:opacity-20 disabled:cursor-not-allowed ${
                   darkMode
-                    ? 'text-white/35 hover:text-purple-400 hover:bg-white/[0.06]'
-                    : 'text-gray-400 hover:text-indigo-600 hover:bg-gray-200/60'
+                    ? 'text-white/20 hover:text-white/50 hover:bg-white/[0.06]'
+                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200/60'
                 }`}
                 title={t('shortcuts.promptLibrary') + ' (Ctrl+P)'}
               >
@@ -496,10 +500,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               <button
                 onClick={() => { playClick(); fileInputRef.current?.click(); }}
                 disabled={isStreaming || disabled}
-                className={`p-2 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+                className={`p-2 rounded-xl transition-all duration-200 apple-btn disabled:opacity-20 disabled:cursor-not-allowed ${
                   darkMode
-                    ? 'text-white/35 hover:text-cyan-400 hover:bg-white/[0.06]'
-                    : 'text-gray-400 hover:text-indigo-600 hover:bg-gray-200/60'
+                    ? 'text-white/20 hover:text-white/50 hover:bg-white/[0.06]'
+                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200/60'
                 }`}
                 title="上传文件（图片、代码、文本）"
               >
@@ -510,18 +514,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               <button
                 onClick={onToggleWebSearch}
                 disabled={isStreaming || disabled}
-                className={`inline-flex items-center gap-1.5 rounded-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed ${
+                className={`inline-flex items-center gap-1.5 rounded-xl transition-all duration-200 apple-btn disabled:opacity-20 disabled:cursor-not-allowed ${
                   webSearch
                     ? 'px-2 py-2 ' + (darkMode
-                      ? 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40 shadow-[0_0_14px_rgba(0,255,136,0.25)]'
-                      : 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-400/40')
+                      ? 'bg-white/[0.06] text-white/60 ring-1 ring-white/[0.08] shadow-sm'
+                      : 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200')
                     : 'px-2 py-2 ' + (darkMode
-                      ? 'text-white/25 hover:text-white/50 hover:bg-white/[0.06]'
+                      ? 'text-white/20 hover:text-white/40 hover:bg-white/[0.04]'
                       : 'text-gray-400 hover:text-gray-500 hover:bg-gray-200/60')
                 }`}
                 title={webSearch ? '关闭联网搜索' : '开启联网搜索'}
               >
-                <Globe className={`w-4 h-4 ${webSearch ? 'fill-emerald-400/30' : ''}`} />
+                <Globe className={`w-4 h-4 ${webSearch ? 'opacity-80' : ''}`} />
                 {webSearch && (
                   <span className="text-[11px] font-medium whitespace-nowrap">联网</span>
                 )}
@@ -530,9 +534,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               {isStreaming ? (
                 <button
                   onClick={onStop}
-                  className={`p-1.5 rounded-xl transition-all duration-200 ${
+                  className={`p-2 rounded-2xl transition-all duration-200 apple-btn ${
                     darkMode
-                      ? 'bg-red-500/15 text-red-400 hover:bg-red-500/25 shadow-[0_0_12px_rgba(239,68,68,0.15)] hover:shadow-[0_0_16px_rgba(239,68,68,0.25)]'
+                      ? 'bg-white/[0.06] text-white/60 hover:bg-white/[0.12] shadow-sm'
                       : 'bg-rose-100 text-rose-600 hover:bg-rose-200'
                   }`}
                   title="停止生成"
@@ -543,14 +547,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 <button
                   onClick={handleSend}
                   disabled={(!input.trim() && pendingFiles.length === 0) || disabled}
-                  className={`p-1.5 rounded-xl transition-all duration-200 disabled:opacity-15 disabled:cursor-not-allowed ${
+                  className={`p-2 rounded-2xl transition-all duration-200 apple-btn disabled:opacity-15 disabled:cursor-not-allowed ${
                     darkMode
                       ? (input.trim() || pendingFiles.length > 0)
-                        ? 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 shadow-[0_0_14px_rgba(0,229,255,0.2)] hover:shadow-[0_0_22px_rgba(0,229,255,0.3)]'
-                        : 'bg-transparent text-gray-600'
+                        ? 'bg-white/[0.08] text-white/70 hover:bg-white/[0.14] shadow-sm'
+                        : 'text-white/15'
                       : (input.trim() || pendingFiles.length > 0)
-                        ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm'
-                        : 'bg-transparent text-gray-300'
+                        ? 'bg-gray-800 text-white hover:bg-gray-900 shadow-sm'
+                        : 'text-gray-300'
                   }`}
                   title="发送 (Enter)"
                 >
@@ -561,39 +565,41 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           </div>
 
           {/* Footer info bar */}
-          <div className="flex items-center justify-between mt-2.5 px-1">
+          <div className="flex items-center justify-between mt-3 px-1">
             <div className="flex items-center gap-2.5">
               {model && (
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${
+                <span className={cn(
+                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium',
                   darkMode
-                    ? 'bg-white/[0.03] border border-white/[0.05] text-cyan-400/60'
+                    ? 'glass-pill text-white/40'
                     : 'bg-gray-100 text-gray-500'
-                }`}>
+                )}>
                   <div className={`w-1.5 h-1.5 rounded-full ${
                     darkMode
-                      ? 'bg-emerald-400 shadow-[0_0_6px_rgba(0,255,136,0.5)] animate-pulse'
+                      ? 'bg-white/40 shadow-[0_0_4px_rgba(255,255,255,0.2)]'
                       : 'bg-emerald-500'
                   }`} />
                   {getModelLabel(model)}
                 </span>
               )}
               {webSearch && (
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] ${
+                <span className={cn(
+                  'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px]',
                   darkMode
-                    ? 'bg-emerald-500/10 text-emerald-400/80 border border-emerald-500/15'
+                    ? 'glass-pill text-white/40'
                     : 'bg-emerald-100 text-emerald-700'
-                }`}>
+                )}>
                   <Globe className="w-2.5 h-2.5" />
                   联网搜索
                 </span>
               )}
               {isStreaming && (
                 <span className={`inline-flex items-center gap-1.5 text-[11px] ${
-                  darkMode ? 'text-purple-400/60' : 'text-indigo-500'
+                  darkMode ? 'text-white/30' : 'text-gray-500'
                 }`}>
                   <div className="relative w-1.5 h-1.5">
-                    <div className="absolute inset-0 rounded-full bg-purple-400 animate-ping" />
-                    <div className="absolute inset-0 rounded-full bg-purple-400" />
+                    <div className="absolute inset-0 rounded-full bg-white/40 animate-ping" />
+                    <div className="absolute inset-0 rounded-full bg-white/40" />
                   </div>
                   思考中…
                 </span>
@@ -602,13 +608,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             <div className="flex items-center gap-3">
               {charCount > 0 && (
                 <span className={`text-[11px] tabular-nums font-mono ${
-                  darkMode ? 'text-cyan-400/40' : 'text-gray-400'
+                  darkMode ? 'text-white/20' : 'text-gray-400'
                 }`}>
                   ≈{tokenEstimate.toLocaleString()} tokens
                 </span>
               )}
               <span className={`text-[11px] ${
-                darkMode ? 'text-gray-700' : 'text-gray-400'
+                darkMode ? 'text-white/10' : 'text-gray-400'
               }`}>DeepSeek V4</span>
             </div>
           </div>

@@ -68,11 +68,13 @@ class TokenScheduler {
   }
 
   pushReasoning(chunk: string) {
+    if (this.aborted) return;
     this.reasoningBuf.push(chunk);
     this.scheduleFlush();
   }
 
   pushContent(chunk: string) {
+    if (this.aborted) return;
     this.contentBuf.push(chunk);
     this.scheduleFlush();
   }
@@ -125,6 +127,7 @@ class TokenScheduler {
 }
 
 import type { APITokenUsage } from '../types';
+import { DEFAULT_DEEPSEEK_MODEL } from '../types';
 
 export interface StreamCallbacks {
   onToken: (content: string) => void;
@@ -221,7 +224,7 @@ export async function streamChat(
   // ── Build API request body ──
   const body: Record<string, unknown> = {
     messages: apiMessages,
-    model: params.model ?? 'deepseek-v4-flash',
+    model: params.model ?? DEFAULT_DEEPSEEK_MODEL,
     temperature: params.temperature ?? 0.7,
     max_tokens: params.max_tokens ?? 4096,
     thinking: params.thinking ?? false,
@@ -290,7 +293,7 @@ export async function streamChat(
         method: 'POST',
         headers,
         body: JSON.stringify(body),
-        signal: controller.signal,
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120_000)]),
       });
 
       // Handle non-OK responses
@@ -300,7 +303,12 @@ export async function streamChat(
           retryCount++;
           const delay = retryDelay(retryCount);
           console.warn(`[stream] 速率限制，${(delay / 1000).toFixed(0)}s 后重试 (${retryCount}/${MAX_RETRIES})`);
-          await new Promise((r) => setTimeout(r, delay));
+          await new Promise((r) => {
+            const timeout = setTimeout(r, delay);
+            // Abort during delay: clear timer and stop retrying
+            controller.signal.addEventListener('abort', () => clearTimeout(timeout), { once: true });
+          });
+          if (controller.signal.aborted) break;
           continue;
         }
 
@@ -327,7 +335,11 @@ export async function streamChat(
           retryCount++;
           const delay = retryDelay(retryCount);
           console.warn(`[stream] 服务端错误 (${response.status})，${(delay / 1000).toFixed(0)}s 后重试 (${retryCount}/${MAX_RETRIES})`);
-          await new Promise((r) => setTimeout(r, delay));
+          await new Promise((r) => {
+            const timeout = setTimeout(r, delay);
+            controller.signal.addEventListener('abort', () => clearTimeout(timeout), { once: true });
+          });
+          if (controller.signal.aborted) break;
           continue;
         }
 
@@ -458,7 +470,11 @@ export async function streamChat(
         const delay = retryDelay(retryCount);
         const reason = err instanceof Error ? err.message : 'Unknown';
         console.warn(`[stream] 网络错误: ${reason}，${(delay / 1000).toFixed(0)}s 后重试 (${retryCount}/${MAX_RETRIES})`);
-        await new Promise((r) => setTimeout(r, delay));
+        await new Promise((r) => {
+          const timeout = setTimeout(r, delay);
+          controller.signal.addEventListener('abort', () => clearTimeout(timeout), { once: true });
+        });
+        if (controller.signal.aborted) break;
         continue;
       }
 

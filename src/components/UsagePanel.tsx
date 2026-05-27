@@ -227,8 +227,8 @@ export function UsagePanel({ open, onClose }: UsagePanelProps) {
     : null;
 
   const panelBg = darkMode
-    ? 'bg-[#0a0a1a]/98 backdrop-blur-xl border-l border-white/[0.06]'
-    : 'bg-white/95 backdrop-blur-xl border-l border-gray-200/80';
+    ? 'backdrop-blur-[50px] saturate-[200%] bg-black/[0.28] border-l border-white/[0.06]'
+    : 'backdrop-blur-[45px] saturate-[190%] brightness-[1.05] bg-white/[0.40] border-l border-gray-200/20';
   const cardBg = darkMode
     ? 'bg-white/[0.02] border border-white/[0.06] rounded-xl'
     : 'bg-gray-50 border border-gray-200 rounded-xl';
@@ -244,7 +244,7 @@ export function UsagePanel({ open, onClose }: UsagePanelProps) {
       <div className={`relative w-[380px] h-full overflow-y-auto custom-scrollbar shadow-2xl animate-slide-in-right ${panelBg}`}>
         {/* Header */}
         <div className={`sticky top-0 z-10 flex items-center justify-between px-5 py-4 border-b ${
-          darkMode ? 'border-white/[0.06] bg-[#0a0a1a]/98 backdrop-blur-xl' : 'border-gray-200/80 bg-white/95 backdrop-blur-xl'
+          darkMode ? 'backdrop-blur-[40px] saturate-[200%] bg-black/[0.25] border-white/[0.06]' : 'backdrop-blur-[40px] saturate-[190%] brightness-[1.05] bg-white/[0.45] border-gray-200/20'
         }`}>
           <div className="flex items-center gap-2.5">
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
@@ -389,7 +389,7 @@ export function UsagePanel({ open, onClose }: UsagePanelProps) {
                   <div className={`${cardBg} overflow-hidden`}>
                     <div className="max-h-[340px] overflow-y-auto custom-scrollbar">
                       <table className="w-full text-xs">
-                        <thead className={`sticky top-0 z-[1] ${darkMode ? 'bg-[#0a0a1a]' : 'bg-white'}`}>
+                        <thead className={`sticky top-0 z-[1] ${darkMode ? 'bg-white/[0.03] backdrop-blur-[20px]' : 'bg-white'}`}>
                           <tr className={darkMode ? 'text-gray-500' : 'text-gray-400'}>
                             <th className="text-left px-3 py-2 font-medium">时间</th>
                             <th className="text-left px-3 py-2 font-medium">会话</th>

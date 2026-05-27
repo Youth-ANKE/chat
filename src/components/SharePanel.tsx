@@ -103,11 +103,11 @@ export function SharePanel({ session, onClose }: SharePanelProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className={`w-[480px] max-h-[80vh] rounded-2xl border flex flex-col overflow-hidden ${
-        darkMode ? 'bg-[#0d1117] border-white/[0.06]' : 'bg-white border-gray-200 shadow-2xl'
+        darkMode ? 'backdrop-blur-[45px] saturate-[200%] bg-black/[0.30] border-white/[0.08] shadow-[0_8px_50px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.06)]' : 'bg-white border-gray-200 shadow-2xl'
       }`}>
         {/* Header */}
-        <div className={`flex items-center justify-between px-5 py-4 border-b ${
-          darkMode ? 'border-white/[0.06]' : 'border-gray-100'
+        <div className={`flex items-center justify-between px-5 py-4 border-b backdrop-blur-[30px] saturate-[180%] ${
+          darkMode ? 'border-white/[0.06] bg-white/[0.02]' : 'border-gray-100 bg-white/80'
         }`}>
           <div className="flex items-center gap-2">
             <Share2 className={`w-4 h-4 ${darkMode ? 'text-cyan-400' : 'text-indigo-500'}`} />

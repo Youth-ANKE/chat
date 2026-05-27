@@ -69,14 +69,14 @@ export function ShortcutEditor({ open, onClose }: ShortcutEditorProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div
-        className={`relative w-full max-w-md mx-4 rounded-2xl border shadow-2xl overflow-hidden ${
-          darkMode ? 'bg-[#0a0a1a]/98 border-cyan-500/20' : 'bg-white border-gray-200'
+        className={`relative w-full max-w-md mx-4 rounded-2xl border overflow-hidden ${
+          darkMode ? 'backdrop-blur-[45px] saturate-[200%] bg-black/[0.32] border-cyan-500/20 shadow-[0_8px_50px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.06)]' : 'bg-white border-gray-200 shadow-2xl'
         }`}
         onKeyDown={handleKeyDown}
         tabIndex={0}
       >
         {/* Header */}
-        <div className={`flex items-center justify-between px-5 py-4 border-b ${darkMode ? 'border-white/5' : 'border-gray-200'}`}>
+        <div className={`flex items-center justify-between px-5 py-4 border-b backdrop-blur-[30px] saturate-[180%] ${darkMode ? 'border-white/[0.06] bg-white/[0.02]' : 'border-gray-200 bg-white/80'}`}>
           <div className="flex items-center gap-2.5">
             <Keyboard className={`w-4 h-4 ${darkMode ? 'text-cyan-400' : 'text-indigo-500'}`} />
             <h2 className={`text-base font-semibold ${darkMode ? 'text-white/90' : 'text-gray-900'}`}>自定义快捷键</h2>
@@ -137,7 +137,7 @@ export function ShortcutEditor({ open, onClose }: ShortcutEditorProps) {
           </div>
         </div>
 
-        <div className={`px-5 py-3 border-t flex items-center justify-between ${darkMode ? 'border-white/5' : 'border-gray-200'}`}>
+        <div className={`px-5 py-3 border-t flex items-center justify-between backdrop-blur-[30px] saturate-[180%] ${darkMode ? 'border-white/[0.06] bg-white/[0.02]' : 'border-gray-200 bg-white/80'}`}>
           <p className={`text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
             点击快捷键按钮后按下组合键
           </p>

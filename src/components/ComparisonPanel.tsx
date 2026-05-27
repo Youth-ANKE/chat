@@ -3,6 +3,7 @@ import { X, Send, Square, GitCompare, Loader2 } from 'lucide-react';
 import { useComparisonStore } from '../stores/comparisonStore';
 import { useProviderStore } from '../stores/providerStore';
 import { getModelById, getApiBaseUrl } from '../lib/provider-adapter';
+import { DEFAULT_DEEPSEEK_MODEL } from '../types';
 import { streamChat } from '../lib/stream';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
@@ -15,7 +16,7 @@ interface ComparisonPanelProps {
 
 export function ComparisonPanel({ open, onClose, darkMode, initialPrompt }: ComparisonPanelProps) {
   const [prompt, setPrompt] = useState(initialPrompt ?? '');
-  const [leftModel, setLeftModel] = useState('deepseek-chat');
+  const [leftModel, setLeftModel] = useState(DEFAULT_DEEPSEEK_MODEL);
   const [rightModel, setRightModel] = useState('gpt-4o-mini');
   const [leftProvider, setLeftProvider] = useState('deepseek');
   const [rightProvider, setRightProvider] = useState('openai');
@@ -91,12 +92,10 @@ export function ComparisonPanel({ open, onClose, darkMode, initialPrompt }: Comp
 
   const isLoading = leftStatus === 'streaming' || rightStatus === 'streaming';
 
-  const panelClass = darkMode ? 'glass-heavy border-white/5' : 'bg-white border-gray-200';
-
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#0a0f1e]">
+    <div className={`fixed inset-0 z-50 flex flex-col ${darkMode ? 'backdrop-blur-[50px] saturate-[200%] bg-black/[0.18]' : 'bg-gray-50'}`}>
       {/* Top bar */}
-      <header className={`flex items-center justify-between px-4 py-3 border-b ${darkMode ? 'border-white/[0.06]' : 'border-gray-200'}`}>
+      <header className={`flex items-center justify-between px-4 py-3 border-b ${darkMode ? 'border-white/[0.06] bg-white/[0.03] backdrop-blur-[40px] saturate-[200%]' : 'border-gray-200 bg-white/80 backdrop-blur-xl'}`}>
         <div className="flex items-center gap-2.5">
           <GitCompare className="w-4 h-4 text-purple-400" />
           <h2 className="text-sm font-semibold text-white/80">模型对比</h2>

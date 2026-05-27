@@ -49,7 +49,17 @@ function readBody(req) {
   });
 }
 
-const VALID_MODELS = ['deepseek-v4-flash', 'deepseek-v4-pro'];
+// Model validation is shared with api/chat.js via api/model-validation.js
+// (dynamic import since server.cjs is CommonJS)
+let getValidModel, DEFAULT_MODEL;
+import('./api/model-validation.js')
+  .then((m) => { getValidModel = m.getValidModel; DEFAULT_MODEL = m.DEFAULT_MODEL; })
+  .catch(() => {
+    // Fallback if ESM import fails (e.g., older Node.js)
+    const VALID_MODELS = ['deepseek-v4-flash', 'deepseek-v4-pro'];
+    DEFAULT_MODEL = 'deepseek-v4-flash';
+    getValidModel = (m) => VALID_MODELS.includes(m) ? m : DEFAULT_MODEL;
+  });
 
 async function handleChat(req, res) {
   if (req.method !== 'POST') {
@@ -62,7 +72,7 @@ async function handleChat(req, res) {
   const body = await readBody(req);
   const {
     messages,
-    model = 'deepseek-v4-flash',
+    model = DEFAULT_MODEL || 'deepseek-v4-flash',
     temperature = 0.7,
     max_tokens = 4096,
     thinking = false,
@@ -75,7 +85,7 @@ async function handleChat(req, res) {
     return sendJSON(res, 400, { error: 'messages is required' });
   }
 
-  const selectedModel = VALID_MODELS.includes(model) ? model : 'deepseek-v4-flash';
+  const selectedModel = getValidModel ? getValidModel(model) : model;
   const safeTemperature = Math.min(Math.max(Number(temperature) || 0.7, 0), 2);
   const safeMaxTokens = Math.min(Math.max(Number(max_tokens) || 4096, 1), 8192);
 

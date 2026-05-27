@@ -14,6 +14,27 @@
     --space-darker: #030312;
     --card-bg: #0d0d2b;
     --border-dim: #1a1a40;
+    /* Rich ambient light — the colorful canvas behind the glass */
+    --ambient-cyan: rgba(0,180,255,0.08);
+    --ambient-purple: rgba(140,60,240,0.08);
+    --ambient-blue: rgba(40,80,200,0.06);
+    --ambient-glow-top: 0.22;
+    --ambient-glow-mid: 0.18;
+    --ambient-glow-bot: 0.14;
+    /* Apple liquid glass tokens */
+    --apple-glass-bg: 13,13,43;
+    --apple-glass-alpha: 0.40;
+    --apple-glass-blur: 50px;
+    --apple-glass-saturate: 200%;
+    --apple-glass-border: 255,255,255;
+    --apple-glass-border-alpha: 0.10;
+    --apple-glass-shadow: 0 4px 30px rgba(0,0,0,0.2), 0 1px 3px rgba(0,0,0,0.15);
+    --apple-glass-highlight: 0 1px 0 rgba(255,255,255,0.08);
+    --apple-radius-sm: 12px;
+    --apple-radius-md: 18px;
+    --apple-radius-lg: 24px;
+    --apple-transition: cubic-bezier(0.25, 0.1, 0.25, 1);
+    --apple-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .dark {
@@ -30,18 +51,28 @@
     font-family: 'Inter', 'SF Pro Display', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    letter-spacing: 0.01em;
+    letter-spacing: -0.01em;
   }
 
+  /* Apple-style disappearing scrollbar */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #1a1a40 transparent;
+    scrollbar-color: rgba(255,255,255,0.08) transparent;
   }
 
-  *::-webkit-scrollbar { width: 4px; }
+  *::-webkit-scrollbar { width: 5px; }
   *::-webkit-scrollbar-track { background: transparent; }
-  *::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #1a1a40, #2a2a60); border-radius: 10px; }
-  *::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #2a2a60, #3a3a80); }
+  *::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.06);
+    border-radius: 20px;
+    border: 1px solid transparent;
+    background-clip: padding-box;
+    min-height: 40px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.12);
+    border-radius: 20px;
+  }
 }
 
 /* ══════════════════════════════════════════
@@ -145,28 +176,133 @@
 }
 
 /* ══════════════════════════════════════════
-   Glass morphism
+   Apple Liquid Glass Morphism — Strong Blur
    ══════════════════════════════════════════ */
 
+/* Rich ambient background — colorful canvas behind all glass (dark) */
+.ambient-glass-bg {
+  background:
+    /* Large vibrant blobs across the viewport */
+    radial-gradient(ellipse 70% 60% at 15% 25%, rgba(20,80,200,0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 55% at 75% 20%, rgba(120,50,220,0.25) 0%, transparent 55%),
+    radial-gradient(ellipse 65% 50% at 50% 65%, rgba(0,140,200,0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 45% 40% at 85% 75%, rgba(160,80,200,0.16) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 45% at 25% 80%, rgba(30,100,220,0.14) 0%, transparent 55%),
+    /* Subtle base color */
+    linear-gradient(180deg, #06061a 0%, #090c24 40%, #0a0d26 100%);
+}
+
+/* Rich ambient background — colorful canvas behind all glass (light) */
+.ambient-glass-bg-light {
+  background:
+    radial-gradient(ellipse 70% 60% at 15% 25%, rgba(120,160,240,0.16) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 55% at 75% 20%, rgba(160,120,230,0.14) 0%, transparent 55%),
+    radial-gradient(ellipse 65% 50% at 50% 65%, rgba(100,180,230,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 45% 40% at 85% 75%, rgba(180,140,220,0.10) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 45% at 25% 80%, rgba(100,150,230,0.10) 0%, transparent 55%),
+    linear-gradient(180deg, #f0f2f8 0%, #f5f7fb 40%, #fafbfd 100%);
+}
+
+/* Glass surface — crystal highlight shimmer */
+.glass-crystal {
+  position: relative;
+}
+.glass-crystal::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(255,255,255,0.07) 0%,
+    rgba(255,255,255,0.03) 30%,
+    transparent 50%,
+    rgba(255,255,255,0.01) 70%,
+    rgba(255,255,255,0.05) 100%
+  );
+  z-index: 1;
+}
+
+/* Main glass — frosted translucent panel (dark) */
 .glass {
-  background: rgba(13,13,43,0.75);
-  backdrop-filter: blur(16px) saturate(120%);
-  -webkit-backdrop-filter: blur(16px) saturate(120%);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(var(--apple-glass-bg), var(--apple-glass-alpha));
+  backdrop-filter: blur(var(--apple-glass-blur)) saturate(var(--apple-glass-saturate)) brightness(1.08);
+  -webkit-backdrop-filter: blur(var(--apple-glass-blur)) saturate(var(--apple-glass-saturate)) brightness(1.08);
+  border: 1px solid rgba(var(--apple-glass-border), var(--apple-glass-border-alpha));
+  box-shadow:
+    0 4px 30px rgba(0,0,0,0.2),
+    0 1px 3px rgba(0,0,0,0.15),
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 -1px 0 rgba(255,255,255,0.02);
 }
 
+/* Lighter glass — for secondary panels */
 .glass-light {
-  background: rgba(248,250,255,0.72);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(0,0,0,0.06);
+  background: rgba(var(--apple-glass-bg), 0.20);
+  backdrop-filter: blur(40px) saturate(190%) brightness(1.06);
+  -webkit-backdrop-filter: blur(40px) saturate(190%) brightness(1.06);
+  border: 1px solid rgba(255,255,255,0.07);
+  box-shadow:
+    0 2px 16px rgba(0,0,0,0.10),
+    inset 0 1px 0 rgba(255,255,255,0.05);
 }
 
+/* Heavy glass — for modal overlays, deepest panels */
 .glass-heavy {
-  background: rgba(8,8,30,0.92);
-  backdrop-filter: blur(24px) saturate(150%);
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(var(--apple-glass-bg), 0.70);
+  backdrop-filter: blur(60px) saturate(220%);
+  -webkit-backdrop-filter: blur(60px) saturate(220%);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow:
+    0 8px 50px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 -1px 0 rgba(255,255,255,0.03);
+}
+
+/* Thin glass — for header/toolbar strips */
+.glass-thin {
+  background: rgba(var(--apple-glass-bg), 0.18);
+  backdrop-filter: blur(45px) saturate(190%) brightness(1.06);
+  -webkit-backdrop-filter: blur(45px) saturate(190%) brightness(1.06);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  box-shadow:
+    0 1px 10px rgba(0,0,0,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+/* Light mode glass — frosted white (strong blur) */
+.glass-light-mode {
+  background: rgba(255,255,255,0.40);
+  backdrop-filter: blur(45px) saturate(200%) brightness(1.06);
+  -webkit-backdrop-filter: blur(45px) saturate(200%) brightness(1.06);
+  border: 1px solid rgba(0,0,0,0.05);
+  box-shadow:
+    0 2px 20px rgba(0,0,0,0.03),
+    0 1px 3px rgba(0,0,0,0.02),
+    inset 0 1px 0 rgba(255,255,255,0.6);
+}
+
+/* Light thin glass — for toolbars in light mode */
+.glass-light-thin {
+  background: rgba(255,255,255,0.35);
+  backdrop-filter: blur(40px) saturate(190%) brightness(1.05);
+  -webkit-backdrop-filter: blur(40px) saturate(190%) brightness(1.05);
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  box-shadow:
+    0 1px 8px rgba(0,0,0,0.02),
+    inset 0 1px 0 rgba(255,255,255,0.5);
+}
+
+/* ─── Legacy alias (for backward compat) ─── */
+.glass-enhanced {
+  background: rgba(var(--apple-glass-bg), 0.45);
+  backdrop-filter: blur(45px) saturate(190%) brightness(1.06);
+  -webkit-backdrop-filter: blur(45px) saturate(190%) brightness(1.06);
+  border: 1px solid rgba(255,255,255,0.09);
+  box-shadow:
+    0 4px 24px rgba(0,0,0,0.25),
+    inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
 /* ══════════════════════════════════════════
@@ -228,9 +364,9 @@
   background: repeating-linear-gradient(
     0deg,
     transparent,
-    transparent 2px,
-    rgba(255,255,255,0.008) 2px,
-    rgba(255,255,255,0.008) 4px
+    transparent 3px,
+    rgba(255,255,255,0.004) 3px,
+    rgba(255,255,255,0.004) 6px
   );
 }
 
@@ -420,20 +556,23 @@
 }
 
 /* ══════════════════════════════════════════
-   Custom scrollbar
+   Custom scrollbar (Apple-style)
    ══════════════════════════════════════════ */
 
 .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; margin: 8px 0; }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(99,102,241,0.2), rgba(179,102,255,0.15));
-  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 20px;
   border: 1px solid transparent;
+  background-clip: padding-box;
+  min-height: 36px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgba(99,102,241,0.35), rgba(179,102,255,0.3));
+  background: rgba(255,255,255,0.14);
+  border-radius: 20px;
 }
-.custom-scrollbar { scrollbar-width: thin; scrollbar-color: rgba(99,102,241,0.25) transparent; }
+.custom-scrollbar { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent; }
 
 /* Spin animation for logo glow */
 @keyframes spin {
@@ -446,14 +585,55 @@
   75%, 100% { transform: scale(1.8); opacity: 0; }
 }
 
-/* Toast notification animation */
-@keyframes toast-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+/* ══════════════════════════════════════════
+   Apple-style spring transitions
+   ══════════════════════════════════════════ */
+
+@keyframes apple-toast-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.94); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+@keyframes apple-modal-in {
+  from { opacity: 0; transform: scale(0.92) translateY(16px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes apple-slide-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes apple-scale-in {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
 .animate-toast-in {
-  animation: toast-in 0.2s ease-out forwards;
+  animation: apple-toast-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-modal-in {
+  animation: apple-modal-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-apple-in {
+  animation: apple-slide-up 0.4s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+}
+
+/* Apple-style button press */
+.apple-btn {
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.15s ease,
+              background-color 0.15s ease;
+}
+.apple-btn:active {
+  transform: scale(0.94);
+}
+
+/* Apple toggle switch feel */
+.apple-toggle {
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* Smooth slide transitions for panels */
@@ -468,34 +648,71 @@
 }
 
 .animate-slide-panel-in {
-  animation: slide-in-from-right 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slide-in-from-right 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards;
 }
 
 .animate-slide-panel-out {
-  animation: slide-out-to-right 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slide-out-to-right 0.25s cubic-bezier(0.32, 0.72, 0, 1) forwards;
 }
 
 /* Smooth message appear */
 @keyframes message-in {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 .animate-message-in {
-  animation: message-in 0.25s ease-out forwards;
+  animation: message-in 0.35s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
 }
 
-/* Smooth hover lift effect */
+/* Smooth hover lift — Apple style */
 .hover-lift {
-  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.2s ease;
 }
 .hover-lift:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.2);
 }
 
-/* Accent color CSS variables -- applied via JS */
-:root {
-  --accent-rgb: 0, 229, 255;
+/* Smooth button press — Apple style */
+.btn-press {
+  transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.btn-press:active {
+  transform: scale(0.93);
+}
+
+/* Glass card — frosted surface for interactive cards */
+.glass-card {
+  background: rgba(var(--apple-glass-bg), 0.18);
+  backdrop-filter: blur(30px) saturate(180%) brightness(1.06);
+  -webkit-backdrop-filter: blur(30px) saturate(180%) brightness(1.06);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: var(--apple-radius-md);
+  box-shadow:
+    0 2px 16px rgba(0,0,0,0.12),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+  transition: all 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.glass-card:hover {
+  background: rgba(var(--apple-glass-bg), 0.28);
+  border-color: rgba(255,255,255,0.12);
+  box-shadow:
+    0 6px 28px rgba(0,0,0,0.18),
+    inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+/* Glass pill — for small badges/tags */
+.glass-pill {
+  background: rgba(var(--apple-glass-bg), 0.22);
+  backdrop-filter: blur(24px) saturate(170%) brightness(1.05);
+  -webkit-backdrop-filter: blur(24px) saturate(170%) brightness(1.05);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 100px;
+  box-shadow:
+    0 1px 8px rgba(0,0,0,0.10),
+    inset 0 1px 0 rgba(255,255,255,0.04);
 }
 
 /* Message content font size variants */
@@ -503,31 +720,14 @@
 .font-size-base .message-content { font-size: 0.875rem; line-height: 1.7; }
 .font-size-lg .message-content { font-size: 0.9375rem; line-height: 1.75; }
 
-/* Smooth button press */
-.btn-press {
-  transition: transform 0.1s ease;
-}
-.btn-press:active {
-  transform: scale(0.96);
-}
-
-/* Enhanced glass with better edge highlight */
-.glass-enhanced {
-  background: rgba(13,13,43,0.8);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  border: 1px solid rgba(255,255,255,0.08);
-  box-shadow: 
-    0 4px 24px rgba(0,0,0,0.3),
-    inset 0 1px 0 rgba(255,255,255,0.04);
-}
-
-/* Message bubble hover glow */
+/* Message bubble hover glow — Apple refined */
 .message-glow {
   transition: box-shadow 0.2s ease;
 }
 .message-glow:hover {
-  box-shadow: inset 0 0 0 1px rgba(0,229,255,0.05);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+  background: rgba(255,255,255,0.01);
+  transition: all 0.2s ease;
 }
 
 /* Keyboard shortcut key */

@@ -4,6 +4,7 @@
  * now speak OpenAI-compatible APIs, so this is mostly transparent.
  */
 import type { ModelProvider, ProviderModel } from '../types';
+import { DEFAULT_DEEPSEEK_MODEL } from '../types';
 
 /** Default built-in providers */
 export const BUILTIN_PROVIDERS: ModelProvider[] = [
@@ -14,8 +15,8 @@ export const BUILTIN_PROVIDERS: ModelProvider[] = [
     apiKey: '',
     baseUrl: '/api/chat',
     models: [
-      { id: 'deepseek-chat', name: 'DeepSeek V3', maxTokens: 8192, supportsThinking: false, supportsVision: false, supportsTools: true },
-      { id: 'deepseek-reasoner', name: 'DeepSeek R1', maxTokens: 8192, supportsThinking: true, supportsVision: false, supportsTools: false },
+      { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', maxTokens: 8192, supportsThinking: false, supportsVision: false, supportsTools: true, pricing: { inputPerMillion: 1, outputPerMillion: 2 } },
+      { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', maxTokens: 8192, supportsThinking: true, supportsVision: false, supportsTools: true, pricing: { inputPerMillion: 4, outputPerMillion: 16 } },
     ],
     enabled: true,
   },
@@ -113,14 +114,14 @@ export function getAllModels(providers: ModelProvider[]): { providerId: string; 
 /** Build default model and provider for a new session */
 export function getDefaultModelAndProvider(providers: ModelProvider[], defaultModel?: string, defaultProviderId?: string): { model: string; providerId: string } {
   const enabled = getEnabledProviders(providers);
-  if (enabled.length === 0) return { model: 'deepseek-chat', providerId: 'deepseek' };
+  if (enabled.length === 0) return { model: DEFAULT_DEEPSEEK_MODEL, providerId: 'deepseek' };
 
   const targetProvider = defaultProviderId
     ? enabled.find((p) => p.id === defaultProviderId) ?? enabled[0]
     : enabled[0];
 
   const modelExists = defaultModel && targetProvider.models.some((m) => m.id === defaultModel);
-  const model = modelExists ? defaultModel! : (targetProvider.models[0]?.id ?? 'deepseek-chat');
+  const model = modelExists ? defaultModel! : (targetProvider.models[0]?.id ?? DEFAULT_DEEPSEEK_MODEL);
 
   return { model, providerId: targetProvider.id };
 }

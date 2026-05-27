@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import type { ChatSession, ChatMessage, ModelName } from '../types';
+import { DEFAULT_DEEPSEEK_MODEL } from '../types';
 import { createSession } from '../lib/session';
 import { loadSessions, saveSession, deleteSession as delSession } from '../lib/storage';
 import { useSettingsStore } from './settingsStore';
 
-const DEFAULT_MODEL = 'deepseek-chat';
+const DEFAULT_MODEL = DEFAULT_DEEPSEEK_MODEL;
 
 interface ChatState {
   sessions: ChatSession[];
@@ -304,11 +305,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   exportConversation: (sessionId: string) => {
     const session = get().sessions.find((s) => s.id === sessionId);
     if (!session) return '';
+    const settings = useSettingsStore.getState().settings;
+    const isZh = settings.language === 'zh';
     const lines: string[] = [];
     lines.push(`# ${session.title}`);
     lines.push('');
-    lines.push(`> 模型: ${session.model} | Temperature: ${session.temperature} | 深度思考: ${session.thinking ? '是' : '否'}`);
-    lines.push(`> 导出时间: ${new Date().toLocaleString('zh-CN')}`);
+    lines.push(`> ${isZh ? '模型' : 'Model'}: ${session.model} | Temperature: ${session.temperature} | ${isZh ? '深度思考' : 'Thinking'}: ${session.thinking ? (isZh ? '是' : 'Yes') : (isZh ? '否' : 'No')}`);
+    lines.push(`> ${isZh ? '导出时间' : 'Exported'}: ${new Date().toLocaleString(isZh ? 'zh-CN' : 'en-US')}`);
     lines.push('');
     lines.push('---');
     lines.push('');
@@ -316,14 +319,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     for (const msg of session.messages) {
       if (msg.role === 'system') continue;
       if (msg.role === 'user') {
-        lines.push(`### 🧑 你`);
+        lines.push(`### ${isZh ? '🧑 你' : '🧑 You'}`);
       } else if (msg.status === 'error') {
-        lines.push(`### ❌ 错误`);
+        lines.push(`### ${isZh ? '❌ 错误' : '❌ Error'}`);
       } else {
         lines.push(`### 🤖 DeepSeek`);
       }
       lines.push('');
-      lines.push(msg.content || '（空消息）');
+      lines.push(msg.content || (isZh ? '（空消息）' : '(empty)'));
       lines.push('');
     }
     return lines.join('\n');

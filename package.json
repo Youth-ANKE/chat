@@ -1,14 +1,67 @@
 {
-  "name": "deepseek-chatbox-lite",
+  "name": "deepchat",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "dev:api": "node server.cjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "start": "bash start.sh"
+    "start": "bash start.sh",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:build": "ELECTRON=true vite build && electron-builder",
+    "electron:build:win": "ELECTRON=true vite build && electron-builder --win portable",
+    "electron:build:mac": "ELECTRON=true vite build && electron-builder --mac",
+    "electron:build:linux": "ELECTRON=true vite build && electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.deepchat.app",
+    "productName": "DeepChat",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "server.cjs",
+      "api/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "public",
+        "to": "public"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/favicon.svg"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "DeepChat"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": "dmg"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network"
+    }
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -38,9 +91,13 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "concurrently": "^9.2.1",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.16",
     "typescript": "~5.6.2",
-    "vite": "^6.0.3"
+    "vite": "^6.0.3",
+    "wait-on": "^8.0.5"
   }
 }

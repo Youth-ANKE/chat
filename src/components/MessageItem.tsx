@@ -143,8 +143,20 @@ export function MessageItem({ message, allMessages, isEditing, onEdit, onStartEd
 
   if (isSystem) return null;
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(message.content);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+    } catch {
+      // Fallback for browsers without Clipboard API permission
+      const ta = document.createElement('textarea');
+      ta.value = message.content;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
     playClick();
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

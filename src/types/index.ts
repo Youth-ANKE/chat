@@ -20,25 +20,14 @@ export interface ChatMessage {
   attachments?: AttachedFile[];
   /** Auto-generated title flag (for the message that triggered title generation) */
   titleGenerated?: boolean;
+  /** ID of the message being replied to */
+  replyTo?: string;
 }
 
 export type ModelName = string;
 
-export interface ChatMessage {
-  id: string;
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-  createdAt: string;
-  status?: 'streaming' | 'done' | 'error';
-  error?: string;
-  reasoning?: string;
-  /** Files attached by the user (shown as previews, sent as multimodal content) */
-  attachments?: AttachedFile[];
-  /** Auto-generated title flag (for the message that triggered title generation) */
-  titleGenerated?: boolean;
-  /** ID of the message being replied to */
-  replyTo?: string;
-}
+/** Centralised default model — change here to update all references */
+export const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
 export interface ChatSession {
   id: string;
@@ -140,8 +129,8 @@ export interface UsageRecord {
 
 /** Pricing — dynamic based on provider models */
 export const DEFAULT_PRICING: Record<string, { inputPerMillion: number; outputPerMillion: number; label: string }> = {
-  'deepseek-chat':       { inputPerMillion: 1,  outputPerMillion: 2,  label: 'DeepSeek V3' },
-  'deepseek-reasoner':   { inputPerMillion: 4,  outputPerMillion: 16, label: 'DeepSeek R1' },
+  'deepseek-v4-flash':   { inputPerMillion: 1,  outputPerMillion: 2,  label: 'DeepSeek V4 Flash' },
+  'deepseek-v4-pro':     { inputPerMillion: 4,  outputPerMillion: 16, label: 'DeepSeek V4 Pro' },
   'gpt-4o':              { inputPerMillion: 15, outputPerMillion: 60, label: 'GPT-4o' },
   'gpt-4o-mini':         { inputPerMillion: 0.6, outputPerMillion: 2.4, label: 'GPT-4o Mini' },
   'claude-sonnet-4-20250514': { inputPerMillion: 21, outputPerMillion: 105, label: 'Claude Sonnet 4' },
@@ -167,7 +156,7 @@ export const DEFAULT_SETTINGS: Settings = {
   musicEnabled: false,
   musicMode: 'sequential',
   musicVolume: 27,
-  defaultModel: 'deepseek-chat',
+  defaultModel: DEFAULT_DEEPSEEK_MODEL,
   defaultProviderId: 'deepseek',
   defaultTemperature: 0.7,
   defaultThinking: true,
