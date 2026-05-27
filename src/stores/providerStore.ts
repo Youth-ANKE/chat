@@ -47,6 +47,8 @@ interface ProviderState {
   addModel: (providerId: string, model: ProviderModel) => void;
   /** Remove a model from a provider */
   removeModel: (providerId: string, modelId: string) => void;
+  /** Batch replace all models for a provider */
+  setModels: (providerId: string, models: ProviderModel[]) => void;
   /** Get all enabled providers */
   getEnabled: () => ModelProvider[];
   /** Export providers as JSON */
@@ -123,6 +125,15 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
         p.id === providerId
           ? { ...p, models: p.models.filter((m) => m.id !== modelId) }
           : p
+      );
+      persistProviders(next);
+      return { providers: next };
+    }),
+
+  setModels: (providerId, models) =>
+    set((state) => {
+      const next = state.providers.map((p) =>
+        p.id === providerId ? { ...p, models } : p
       );
       persistProviders(next);
       return { providers: next };

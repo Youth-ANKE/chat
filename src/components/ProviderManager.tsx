@@ -1,7 +1,8 @@
-import { X, Plus, Eye, EyeOff, Key, Globe, Trash2, Info } from 'lucide-react';
+import { X, Plus, Eye, EyeOff, Key, Globe, Trash2, Info, CheckCircle, XCircle, Loader2, Search, Wifi } from 'lucide-react';
 import { useState } from 'react';
 import type { ModelProvider, ProviderModel } from '../types';
 import { useProviderStore } from '../stores/providerStore';
+import { testProviderConnection, fetchProviderModels } from '../lib/provider-test';
 
 /** Detect if running inside Electron */
 const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI?.isElectron;
@@ -11,10 +12,18 @@ interface ProviderManagerProps {
 }
 
 export function ProviderManager({ darkMode }: ProviderManagerProps) {
-  const { providers, toggleProvider, setApiKey, setBaseUrl, addModel, removeModel } = useProviderStore();
+  const { providers, toggleProvider, setApiKey, setBaseUrl, addModel, removeModel, setModels } = useProviderStore();
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [newModelProvider, setNewModelProvider] = useState<string | null>(null);
   const [newModelData, setNewModelData] = useState({ id: '', name: '', maxTokens: 4096 });
+
+  // ── 连接检测 / 模型拉取 状态 ──
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const [fetchingId, setFetchingId] = useState<string | null>(null);
+  const [fetchedModels, setFetchedModels] = useState<Record<string, ProviderModel[]>>({});
+  const [fetchError, setFetchError] = useState<Record<string, string>>({});
+  const [selectedModelIds, setSelectedModelIds] = useState<Record<string, Set<string>>>({});
 
   const toggleShowKey = (id: string) => setShowKeys((s) => ({ ...s, [id]: !s[id] }));
 
@@ -31,6 +40,63 @@ export function ProviderManager({ darkMode }: ProviderManagerProps) {
     addModel(providerId, model);
     setNewModelData({ id: '', name: '', maxTokens: 4096 });
     setNewModelProvider(null);
+  };
+
+  /** 一键检测：先测连接，再拉模型列表 */
+  const handleDetect = async (provider: ModelProvider) => {
+    if (!provider.enabled) return;
+    if (!provider.apiKey && provider.type !== 'ollama') return;
+
+    setTestingId(provider.id);
+    setTestResult((p) => ({ ...p, [provider.id]: undefined as any }));
+    setFetchedModels((p) => { const n = { ...p }; delete n[provider.id]; return n; });
+    setFetchError((p) => { const n = { ...p }; delete n[provider.id]; return n; });
+
+    // Step 1: Test connection
+    const conn = await testProviderConnection(provider);
+    setTestingId(null);
+    setTestResult((p) => ({ ...p, [provider.id]: { ok: conn.ok, message: conn.ok ? conn.message! : conn.error! } }));
+
+    if (!conn.ok) return;
+
+    // Step 2: Fetch models
+    setFetchingId(provider.id);
+    const result = await fetchProviderModels(provider);
+    setFetchingId(null);
+
+    if (result.ok && result.models.length > 0) {
+      setFetchedModels((p) => ({ ...p, [provider.id]: result.models }));
+      // Auto-select all fetched models by default
+      setSelectedModelIds((p) => ({
+        ...p,
+        [provider.id]: new Set(result.models.map((m) => m.id)),
+      }));
+    } else {
+      setFetchError((p) => ({ ...p, [provider.id]: result.error || '未获取到模型' }));
+    }
+  };
+
+  /** 勾选/取消勾选单个模型 */
+  const toggleModelSelect = (providerId: string, modelId: string) => {
+    setSelectedModelIds((prev) => {
+      const current = new Set(prev[providerId] || []);
+      if (current.has(modelId)) current.delete(modelId);
+      else current.add(modelId);
+      return { ...prev, [providerId]: current };
+    });
+  };
+
+  /** 保存勾选的模型到 provider */
+  const saveSelectedModels = (providerId: string) => {
+    const allModels = fetchedModels[providerId];
+    if (!allModels) return;
+    const selected = new Set(selectedModelIds[providerId] || []);
+    const toSave = allModels.filter((m) => selected.has(m.id));
+    if (toSave.length === 0) return;
+    setModels(providerId, toSave);
+    // Clear fetched state
+    setFetchedModels((p) => { const n = { ...p }; delete n[provider.id]; return n; });
+    setSelectedModelIds((p) => { const n = { ...p }; delete n[provider.id]; return n; });
   };
 
   const inputClass = `w-full px-3 py-2 rounded-lg text-xs outline-none transition-all ${
@@ -117,9 +183,110 @@ export function ProviderManager({ darkMode }: ProviderManagerProps) {
                   />
                 </div>
 
+                {/* ── 一键检测按钮 ── */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleDetect(provider)}
+                    disabled={testingId === provider.id || fetchingId === provider.id}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
+                      testingId === provider.id || fetchingId === provider.id
+                        ? darkMode ? 'bg-white/[0.04] text-gray-500 cursor-not-allowed' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : darkMode ? 'bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25 border border-cyan-500/20' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200'
+                    }`}
+                  >
+                    {testingId === provider.id || fetchingId === provider.id ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Search className="w-3 h-3" />
+                    )}
+                    {testingId === provider.id ? '检测中...' : fetchingId === provider.id ? '拉取模型...' : '一键检测'}
+                  </button>
+
+                  {/* Connection test result chip */}
+                  {testResult[provider.id] && (
+                    <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${
+                      testResult[provider.id].ok
+                        ? darkMode ? 'text-emerald-400 bg-emerald-500/10' : 'text-emerald-600 bg-emerald-50'
+                        : darkMode ? 'text-red-400 bg-red-500/10' : 'text-red-600 bg-red-50'
+                    }`}>
+                      {testResult[provider.id].ok ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                      {testResult[provider.id].message}
+                    </span>
+                  )}
+                </div>
+
+                {/* ── Fetched models with checkboxes ── */}
+                {fetchedModels[provider.id] && fetchedModels[provider.id].length > 0 && (
+                  <div className={`rounded-xl border p-3 ${
+                    darkMode ? 'border-emerald-500/15 bg-emerald-500/[0.03]' : 'border-emerald-200 bg-emerald-50/30'
+                  }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`text-[11px] font-semibold ${darkMode ? 'text-emerald-400' : 'text-emerald-700'}`}>
+                        <Wifi className="w-3 h-3 inline mr-1" />
+                        检测到 {fetchedModels[provider.id].length} 个模型，勾选需要使用的：
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                      {fetchedModels[provider.id].map((m) => {
+                        const isSelected = selectedModelIds[provider.id]?.has(m.id) ?? true;
+                        return (
+                          <button
+                            key={m.id}
+                            onClick={() => toggleModelSelect(provider.id, m.id)}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] border transition-all ${
+                              isSelected
+                                ? darkMode
+                                  ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
+                                  : 'bg-indigo-100 text-indigo-700 border-indigo-300'
+                                : darkMode
+                                  ? 'bg-white/[0.02] text-gray-500 border-white/[0.04] line-through'
+                                  : 'bg-gray-50 text-gray-400 border-gray-200 line-through'
+                            }`}
+                          >
+                            {m.id}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="flex items-center gap-2 mt-2.5">
+                      <button
+                        onClick={() => saveSelectedModels(provider.id)}
+                        disabled={(selectedModelIds[provider.id]?.size ?? 0) === 0}
+                        className={`px-3 py-1 rounded-md text-[11px] font-medium transition-all ${
+                          darkMode
+                            ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 disabled:opacity-30 disabled:cursor-not-allowed'
+                            : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 disabled:opacity-30 disabled:cursor-not-allowed'
+                        }`}
+                      >
+                        <CheckCircle className="w-3 h-3 inline mr-1" />
+                        保存选中模型
+                      </button>
+                      <button
+                        onClick={() => {
+                          setFetchedModels((p) => { const n = { ...p }; delete n[provider.id]; return n; });
+                          setSelectedModelIds((p) => { const n = { ...p }; delete n[provider.id]; return n; });
+                        }}
+                        className={`px-2 py-1 rounded-md text-[11px] ${darkMode ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Fetch error */}
+                {fetchError[provider.id] && (
+                  <div className={`text-[10px] px-2 py-1 rounded-lg ${
+                    darkMode ? 'text-red-400 bg-red-500/[0.06]' : 'text-red-600 bg-red-50'
+                  }`}>
+                    <XCircle className="w-3 h-3 inline mr-1" />
+                    {fetchError[provider.id]}
+                  </div>
+                )}
+
                 {/* Models */}
                 <div>
-                  <label className={labelClass}>模型列表</label>
+                  <label className={labelClass}>当前模型列表</label>
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {provider.models.map((m) => (
                       <span
@@ -129,14 +296,12 @@ export function ProviderManager({ darkMode }: ProviderManagerProps) {
                         }`}
                       >
                         {m.name}
-                        {provider.type === 'ollama' && (
-                          <button
-                            onClick={() => removeModel(provider.id, m.id)}
-                            className="hover:text-red-400"
-                          >
-                            <X className="w-2.5 h-2.5" />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => removeModel(provider.id, m.id)}
+                          className="hover:text-red-400"
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
                       </span>
                     ))}
                     <button
@@ -145,7 +310,7 @@ export function ProviderManager({ darkMode }: ProviderManagerProps) {
                         darkMode ? 'text-cyan-400/60 hover:text-cyan-400 hover:bg-cyan-500/10' : 'text-indigo-500 hover:bg-indigo-50'
                       }`}
                     >
-                      <Plus className="w-2.5 h-2.5" />添加
+                      <Plus className="w-2.5 h-2.5" />手动添加
                     </button>
                   </div>
                   {newModelProvider === provider.id && (
